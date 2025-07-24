@@ -3,34 +3,20 @@ package com.example.qonfetty.ui
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ExitToApp
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowForward
-
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -42,17 +28,13 @@ import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
 import com.example.qonfetty.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.qonfetty.data.PointsTransaction
-import com.example.qonfetty.data.PointsTransactionWithCustomer
-import com.example.qonfetty.data.TransactionStats
+import com.example.qonfetty.data.*
 import com.example.qonfetty.nfc.NfcProcessingResult
 import com.example.qonfetty.ui.components.LiveDataIndicator
 import com.example.qonfetty.ui.theme.StatusBarSpacer
 import java.text.SimpleDateFormat
 import java.util.*
 import android.util.Log
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
@@ -959,162 +941,6 @@ private fun StoreInfoCard(
 }
 
 
-
-@Composable
-private fun RecentActivityCard(
-    recentActivity: List<PointsTransactionWithCustomer>,
-    onClearHistory: () -> Unit,
-    onViewAll: () -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Recent Activity",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    TextButton(onClick = onClearHistory) {
-                        Text("Clear")
-                    }
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            if (recentActivity.isEmpty()) {
-                // Empty state
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Star,
-                        contentDescription = null,
-                        modifier = Modifier.size(48.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "No recent activity",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "Scan an NFC card to see activity here",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            } else {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(recentActivity) { transaction ->
-                        ActivityItem(activity = transaction)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ActivityItem(activity: PointsTransactionWithCustomer) {
-    val dateFormat = remember { SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()) }
-    val timeString = remember(activity.createdAt) { 
-        activity.createdAt?.let { 
-            try {
-                // Parse ISO 8601 timestamp
-                // Simple date parsing that works on older API levels
-                val date = try {
-                    val formatter = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'", java.util.Locale.getDefault())
-                    formatter.parse(it) ?: Date()
-                } catch (e: Exception) {
-                    try {
-                        val formatter = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.getDefault())
-                        formatter.parse(it) ?: Date()
-                    } catch (e2: Exception) {
-                        Date() // Fallback to current date
-                    }
-                }
-                dateFormat.format(date)
-            } catch (e: Exception) {
-                "Recent"
-            }
-        } ?: "Recent"
-    }
-    
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // Activity icon
-        Icon(
-            imageVector = Icons.Filled.Person,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(24.dp)
-        )
-        
-        Spacer(modifier = Modifier.width(12.dp))
-        
-        // Activity details
-        Column(
-            modifier = Modifier.weight(1f)
-        ) {
-            Text(
-                text = activity.customerName ?: "Customer: ${activity.customerId.take(8)}...",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium
-            )
-            Text(
-                text = "+${activity.pointsAwarded} points • ${activity.transactionType.replace("_", " ").capitalize()}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            if (activity.nfcCardId != null) {
-                Text(
-                    text = "Card: ${activity.nfcCardId}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-        
-        // Time and total points
-        Column(
-            horizontalAlignment = Alignment.End
-        ) {
-            Text(
-                text = timeString,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = "${activity.newPoints} pts",
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.Medium
-            )
-        }
-    }
-}
 
 @Composable
 fun TransactionStatsCard(

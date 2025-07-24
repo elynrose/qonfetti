@@ -157,7 +157,19 @@ fun TransactionsScreen(
 
 @Composable
 private fun TransactionItem(transaction: PointsTransactionWithCustomer) {
-    val dateFormat = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
+    val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'", Locale.getDefault())
+    val displayFormat = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
+    
+    // Parse the createdAt string to a Date object
+    val displayDate = try {
+        transaction.createdAt?.let { dateString ->
+            val date = dateFormat.parse(dateString)
+            displayFormat.format(date)
+        } ?: "Unknown date"
+    } catch (e: Exception) {
+        // Fallback to showing the raw string if parsing fails
+        transaction.createdAt ?: "Unknown date"
+    }
     
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -196,7 +208,7 @@ private fun TransactionItem(transaction: PointsTransactionWithCustomer) {
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = dateFormat.format(transaction.createdAt),
+                        text = displayDate,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
