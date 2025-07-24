@@ -158,7 +158,7 @@ fun TransactionsScreen(
 @Composable
 private fun TransactionItem(transaction: PointsTransactionWithCustomer) {
     val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'", Locale.getDefault())
-    val displayFormat = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
+    val displayFormat = SimpleDateFormat("MMM dd, yyyy 'at' h:mm a", Locale.getDefault())
     
     // Parse the createdAt string to a Date object
     val displayDate = try {
@@ -169,6 +169,12 @@ private fun TransactionItem(transaction: PointsTransactionWithCustomer) {
     } catch (e: Exception) {
         // Fallback to showing the raw string if parsing fails
         transaction.createdAt ?: "Unknown date"
+    }
+    
+    // Format transaction type for display
+    val displayTransactionType = when (transaction.transactionType) {
+        "nfc_scan" -> "Card Scan"
+        else -> transaction.transactionType.replace("_", " ").replaceFirstChar { it.uppercase() }
     }
     
     Card(
@@ -192,7 +198,7 @@ private fun TransactionItem(transaction: PointsTransactionWithCustomer) {
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = transaction.transactionType,
+                        text = displayTransactionType,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -213,15 +219,6 @@ private fun TransactionItem(transaction: PointsTransactionWithCustomer) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-            }
-            
-            if (transaction.description?.isNotEmpty() == true) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = transaction.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
     }
