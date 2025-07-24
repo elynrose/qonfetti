@@ -157,18 +157,42 @@ fun TransactionsScreen(
 
 @Composable
 private fun TransactionItem(transaction: PointsTransactionWithCustomer) {
-    val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'", Locale.getDefault())
+    // Multiple date formats to try
+    val dateFormats = listOf(
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'", Locale.getDefault()),
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.getDefault()),
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault()),
+        SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+    )
     val displayFormat = SimpleDateFormat("MMM dd, yyyy 'at' h:mm a", Locale.getDefault())
     
     // Parse the createdAt string to a Date object
     val displayDate = try {
         transaction.createdAt?.let { dateString ->
-            val date = dateFormat.parse(dateString)
-            displayFormat.format(date)
+            var parsedDate: Date? = null
+            var lastException: Exception? = null
+            
+            // Try each date format
+            for (format in dateFormats) {
+                try {
+                    parsedDate = format.parse(dateString)
+                    break
+                } catch (e: Exception) {
+                    lastException = e
+                    continue
+                }
+            }
+            
+            if (parsedDate != null) {
+                displayFormat.format(parsedDate)
+            } else {
+                // If all parsing failed, try to format the raw string in a readable way
+                "Recent activity"
+            }
         } ?: "Unknown date"
     } catch (e: Exception) {
-        // Fallback to showing the raw string if parsing fails
-        transaction.createdAt ?: "Unknown date"
+        // Final fallback
+        "Recent activity"
     }
     
     // Format transaction type for display
