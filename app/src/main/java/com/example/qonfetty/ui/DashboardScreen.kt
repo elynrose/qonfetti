@@ -83,97 +83,96 @@ fun DashboardScreen(
         }
     )
     
-    Column(
-        modifier = modifier.fillMaxSize()
+    // Content with proper padding and pull to refresh
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .pullRefresh(pullRefreshState)
     ) {
-        // Add top spacing to avoid status bar
-        StatusBarSpacer()
-        
-        // Content with proper padding and pull to refresh
-        Box(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .pullRefresh(pullRefreshState)
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
+            item {
+                // Add top spacing to avoid status bar
+                StatusBarSpacer()
+            }
+            
+            item {
+                // Live data indicator
+                LiveDataIndicator(
+                    refreshState = refreshState,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            
+            item {
+                // Header with NFC status and menu
+                DashboardHeader(
+                    dashboardState = dashboardState,
+                    onClearError = { dashboardViewModel.clearError() },
+                    onShowCustomers = onShowCustomers,
+                    onShowNfcTest = onShowNfcTest,
+                    onShowRewards = onShowRewards,
+                    onShowSettings = onShowSettings,
+                    onLogout = { viewModel.logout() }
+                )
+            }
+            
+            // NFC Scan Result Card (if available)
+            lastScanResult?.let { result ->
                 item {
-                    // Live data indicator
-                    LiveDataIndicator(
-                        refreshState = refreshState,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                
-                item {
-                    // Header with NFC status and menu
-                    DashboardHeader(
-                        dashboardState = dashboardState,
-                        onClearError = { dashboardViewModel.clearError() },
-                        onShowCustomers = onShowCustomers,
-                        onShowNfcTest = onShowNfcTest,
-                        onShowRewards = onShowRewards,
-                        onShowSettings = onShowSettings,
-                        onLogout = { viewModel.logout() }
-                    )
-                }
-                
-                // NFC Scan Result Card (if available)
-                lastScanResult?.let { result ->
-                    item {
-                        NfcScanResultCard(
-                            result = result,
-                            onDismiss = { dashboardViewModel.clearScanResult() },
-                            onShowCustomerDetail = onShowCustomerDetail,
-                            pointsAwarded = dashboardState !is DashboardUiState.ScanConfirmation
-                        )
-                    }
-                }
-                
-                item {
-                    // Store Information Card
-                    StoreInfoCard(
-                        uiState = uiState, 
-                        storeInfo = storeInfo, 
-                        storeSettings = storeSettings,
-                        promotionalMode = dashboardViewModel.promotionalMode.collectAsStateWithLifecycle().value,
-                        onTogglePromotionalMode = { dashboardViewModel.togglePromotionalMode() },
-                        weeksBack = dashboardViewModel.weeksBack.collectAsStateWithLifecycle().value,
-                        weekRangeText = dashboardViewModel.getWeekRangeText(),
-                        onPreviousWeek = { dashboardViewModel.goToPreviousWeek() },
-                        onNextWeek = { dashboardViewModel.goToNextWeek() },
-                        transactionStats = transactionStats
-                    )
-                }
-                
-                item {
-                    // Transaction Statistics Card
-                    TransactionStatsCard(
-                        stats = transactionStats ?: com.example.qonfetty.data.TransactionStats(
-                            totalPurchases = 0.0,
-                            totalClaimed = 0.0,
-                            totalTransactions = 0,
-                            totalPointsEarned = 0,
-                            totalPointsUsed = 0
-                        ),
-                        onRefresh = { dashboardViewModel.refreshDashboard() }
-                    )
-                }
-                
-                item {
-                    // Recent Activity
-                    RecentActivityCard(
-                        recentActivity = recentActivity,
-                        onClearHistory = { dashboardViewModel.clearScanHistory() },
-                        onViewAll = {}
+                    NfcScanResultCard(
+                        result = result,
+                        onDismiss = { dashboardViewModel.clearScanResult() },
+                        onShowCustomerDetail = onShowCustomerDetail,
+                        pointsAwarded = dashboardState !is DashboardUiState.ScanConfirmation
                     )
                 }
             }
+            
+            item {
+                // Store Information Card
+                StoreInfoCard(
+                    uiState = uiState, 
+                    storeInfo = storeInfo, 
+                    storeSettings = storeSettings,
+                    promotionalMode = dashboardViewModel.promotionalMode.collectAsStateWithLifecycle().value,
+                    onTogglePromotionalMode = { dashboardViewModel.togglePromotionalMode() },
+                    weeksBack = dashboardViewModel.weeksBack.collectAsStateWithLifecycle().value,
+                    weekRangeText = dashboardViewModel.getWeekRangeText(),
+                    onPreviousWeek = { dashboardViewModel.goToPreviousWeek() },
+                    onNextWeek = { dashboardViewModel.goToNextWeek() },
+                    transactionStats = transactionStats
+                )
+            }
+            
+            item {
+                // Transaction Statistics Card
+                TransactionStatsCard(
+                    stats = transactionStats ?: com.example.qonfetty.data.TransactionStats(
+                        totalPurchases = 0.0,
+                        totalClaimed = 0.0,
+                        totalTransactions = 0,
+                        totalPointsEarned = 0,
+                        totalPointsUsed = 0
+                    ),
+                    onRefresh = { dashboardViewModel.refreshDashboard() }
+                )
+            }
+            
+            item {
+                // Recent Activity
+                RecentActivityCard(
+                    recentActivity = recentActivity,
+                    onClearHistory = { dashboardViewModel.clearScanHistory() },
+                    onViewAll = {}
+                )
+            }
+        }
         
         // Pull to refresh indicator
         PullRefreshIndicator(
@@ -239,7 +238,6 @@ fun DashboardScreen(
                 }
             }
             else -> {}
-        }
         }
     }
 }
