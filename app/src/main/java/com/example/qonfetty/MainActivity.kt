@@ -51,6 +51,7 @@ import com.example.qonfetty.ui.ClaimedRewardsScreen
 import com.example.qonfetty.ui.ClaimedRewardsViewModel
 import com.example.qonfetty.ui.AddRewardsScreen
 import com.example.qonfetty.ui.AddRewardsViewModel
+import com.example.qonfetty.ui.TransactionsScreen
 
 class MainActivity : ComponentActivity() {
     
@@ -122,6 +123,7 @@ class MainActivity : ComponentActivity() {
                     var showClaims by remember { mutableStateOf<Pair<CustomerWithPoints, com.example.qonfetty.data.Reward>?>(null) }
                     var showClaimedRewards by remember { mutableStateOf<CustomerWithPoints?>(null) }
                     var showAddRewards by remember { mutableStateOf(false) }
+                    var showTransactions by remember { mutableStateOf(false) }
                     var inactivityMessage by remember { mutableStateOf<String?>(null) }
                     
                     // Initialize environment configuration
@@ -369,6 +371,14 @@ class MainActivity : ComponentActivity() {
                                     onBack = { showClaimedRewards = null }
                                 )
                             }
+                            showTransactions -> {
+                                Log.d("MainActivity", "Navigation: showTransactions = $showTransactions")
+                                
+                                TransactionsScreen(
+                                    viewModel = globalDashboardViewModel!!,
+                                    onBack = { showTransactions = false }
+                                )
+                            }
                             selectedCustomer != null -> {
                                 val customerDetailViewModel: CustomerDetailViewModel = viewModel {
                                     CustomerDetailViewModel(supabaseApi!!, sessionStorage, globalDataRefreshManager)
@@ -480,7 +490,8 @@ class MainActivity : ComponentActivity() {
                                         onShowNfcTest = { showNfcTest = true },
                                         onShowRewards = { showRewards = true },
                                         onShowSettings = { showSettings = true },
-                                        onShowCustomerDetail = { customerId -> showCustomerDetailFromDashboard = customerId }
+                                        onShowCustomerDetail = { customerId -> showCustomerDetailFromDashboard = customerId },
+                                        onShowTransactions = { showTransactions = true }
                                     )
                                 }
                             }

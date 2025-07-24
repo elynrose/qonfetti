@@ -59,12 +59,12 @@ import androidx.compose.foundation.verticalScroll
 fun DashboardScreen(
     viewModel: AuthViewModel,
     dashboardViewModel: DashboardViewModel,
-    onShowCustomers: () -> Unit = {},
-    onShowNfcTest: () -> Unit = {},
-    onShowRewards: () -> Unit = {},
-    onShowSettings: () -> Unit = {},
-    onShowCustomerDetail: (String) -> Unit = {},
-    modifier: Modifier = Modifier
+    onShowCustomers: () -> Unit,
+    onShowNfcTest: () -> Unit,
+    onShowRewards: () -> Unit,
+    onShowSettings: () -> Unit,
+    onShowCustomerDetail: (String) -> Unit,
+    onShowTransactions: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val dashboardState by dashboardViewModel.uiState.collectAsStateWithLifecycle()
@@ -87,7 +87,7 @@ fun DashboardScreen(
     
     // Content with proper padding and pull to refresh
     Box(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxSize()
             .pullRefresh(pullRefreshState)
     ) {
@@ -155,12 +155,40 @@ fun DashboardScreen(
                 onRefresh = { dashboardViewModel.refreshDashboard() }
             )
             
-            // Recent Activity
-            RecentActivityCard(
-                recentActivity = recentActivity,
-                onClearHistory = { dashboardViewModel.clearScanHistory() },
-                onViewAll = {}
-            )
+            // View Transactions Button
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Text(
+                        text = "Transaction Analytics",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Text(
+                        text = "View detailed transaction analytics, recent activity, and historical data",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    Button(
+                        onClick = onShowTransactions,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("View Transactions")
+                    }
+                }
+            }
         }
         
         // Pull to refresh indicator
@@ -1089,8 +1117,8 @@ private fun ActivityItem(activity: PointsTransactionWithCustomer) {
 }
 
 @Composable
-private fun TransactionStatsCard(
-    stats: TransactionStats,
+fun TransactionStatsCard(
+    stats: com.example.qonfetty.data.TransactionStats,
     onRefresh: () -> Unit = {}
 ) {
     Card(
