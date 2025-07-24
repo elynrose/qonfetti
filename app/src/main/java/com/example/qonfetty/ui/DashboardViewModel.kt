@@ -341,6 +341,16 @@ class DashboardViewModel(
     fun clearScanHistory() {
         _scanHistory.value = emptyList()
     }
+    
+    /**
+     * Refresh all dashboard data
+     */
+    fun refreshDashboard() {
+        Log.d("DashboardViewModel", "Refreshing dashboard data")
+        loadRecentActivity()
+        loadTransactionStats()
+        loadStoreInfo()
+    }
 }
 
 /**

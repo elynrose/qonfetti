@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Refresh
 
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -64,7 +65,9 @@ fun DashboardScreen(
     val isRefreshing = dashboardState is DashboardUiState.Scanning
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshing,
-        onRefresh = { /* Dashboard doesn't need refresh, but we can clear scan history */ }
+        onRefresh = { 
+            dashboardViewModel.refreshDashboard()
+        }
     )
     
     Column(
@@ -128,13 +131,16 @@ fun DashboardScreen(
             Spacer(modifier = Modifier.height(16.dp))
             
             // Transaction Statistics Card
-            TransactionStatsCard(stats = transactionStats ?: com.example.qonfetty.data.TransactionStats(
-                totalPurchases = 0.0,
-                totalClaimed = 0.0,
-                totalTransactions = 0,
-                totalPointsEarned = 0,
-                totalPointsUsed = 0
-            ))
+            TransactionStatsCard(
+                stats = transactionStats ?: com.example.qonfetty.data.TransactionStats(
+                    totalPurchases = 0.0,
+                    totalClaimed = 0.0,
+                    totalTransactions = 0,
+                    totalPointsEarned = 0,
+                    totalPointsUsed = 0
+                ),
+                onRefresh = { dashboardViewModel.refreshDashboard() }
+            )
             Spacer(modifier = Modifier.height(16.dp))
             
             // Recent Activity
@@ -886,7 +892,10 @@ private fun ActivityItem(activity: PointsTransactionWithCustomer) {
 }
 
 @Composable
-private fun TransactionStatsCard(stats: TransactionStats) {
+private fun TransactionStatsCard(
+    stats: TransactionStats,
+    onRefresh: () -> Unit = {}
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -897,20 +906,38 @@ private fun TransactionStatsCard(stats: TransactionStats) {
             modifier = Modifier.padding(16.dp)
         ) {
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Star,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onTertiaryContainer
-                )
-                Text(
-                    text = "Transaction Analytics",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Star,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                    Text(
+                        text = "Transaction Analytics",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                
+                IconButton(
+                    onClick = onRefresh,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Refresh,
+                        contentDescription = "Refresh analytics",
+                        tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
             
             Spacer(modifier = Modifier.height(12.dp))
