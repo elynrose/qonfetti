@@ -95,85 +95,85 @@ fun DashboardScreen(
                 .fillMaxSize()
                 .pullRefresh(pullRefreshState)
         ) {
-            Column(
+            LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-            // Live data indicator
-            LiveDataIndicator(
-                refreshState = refreshState,
-                modifier = Modifier.align(Alignment.End)
-            )
-            
-            // Header with NFC status and menu
-            DashboardHeader(
-                dashboardState = dashboardState,
-                onClearError = { dashboardViewModel.clearError() },
-                onShowCustomers = onShowCustomers,
-                onShowNfcTest = onShowNfcTest,
-                onShowRewards = onShowRewards,
-                onShowSettings = onShowSettings,
-                onLogout = { viewModel.logout() }
-            )
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // NFC Scan Result Card (if available)
-            lastScanResult?.let { result ->
-                AnimatedVisibility(
-                    visible = true,
-                    enter = expandVertically() + fadeIn(),
-                    exit = shrinkVertically() + fadeOut()
-                ) {
-                    NfcScanResultCard(
-                        result = result,
-                        onDismiss = { dashboardViewModel.clearScanResult() },
-                        onShowCustomerDetail = onShowCustomerDetail,
-                        pointsAwarded = dashboardState !is DashboardUiState.ScanConfirmation
+                item {
+                    // Live data indicator
+                    LiveDataIndicator(
+                        refreshState = refreshState,
+                        modifier = Modifier.fillMaxWidth()
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
+                }
+                
+                item {
+                    // Header with NFC status and menu
+                    DashboardHeader(
+                        dashboardState = dashboardState,
+                        onClearError = { dashboardViewModel.clearError() },
+                        onShowCustomers = onShowCustomers,
+                        onShowNfcTest = onShowNfcTest,
+                        onShowRewards = onShowRewards,
+                        onShowSettings = onShowSettings,
+                        onLogout = { viewModel.logout() }
+                    )
+                }
+                
+                // NFC Scan Result Card (if available)
+                lastScanResult?.let { result ->
+                    item {
+                        NfcScanResultCard(
+                            result = result,
+                            onDismiss = { dashboardViewModel.clearScanResult() },
+                            onShowCustomerDetail = onShowCustomerDetail,
+                            pointsAwarded = dashboardState !is DashboardUiState.ScanConfirmation
+                        )
+                    }
+                }
+                
+                item {
+                    // Store Information Card
+                    StoreInfoCard(
+                        uiState = uiState, 
+                        storeInfo = storeInfo, 
+                        storeSettings = storeSettings,
+                        promotionalMode = dashboardViewModel.promotionalMode.collectAsStateWithLifecycle().value,
+                        onTogglePromotionalMode = { dashboardViewModel.togglePromotionalMode() },
+                        weeksBack = dashboardViewModel.weeksBack.collectAsStateWithLifecycle().value,
+                        weekRangeText = dashboardViewModel.getWeekRangeText(),
+                        onPreviousWeek = { dashboardViewModel.goToPreviousWeek() },
+                        onNextWeek = { dashboardViewModel.goToNextWeek() },
+                        transactionStats = transactionStats
+                    )
+                }
+                
+                item {
+                    // Transaction Statistics Card
+                    TransactionStatsCard(
+                        stats = transactionStats ?: com.example.qonfetty.data.TransactionStats(
+                            totalPurchases = 0.0,
+                            totalClaimed = 0.0,
+                            totalTransactions = 0,
+                            totalPointsEarned = 0,
+                            totalPointsUsed = 0
+                        ),
+                        onRefresh = { dashboardViewModel.refreshDashboard() }
+                    )
+                }
+                
+                item {
+                    // Recent Activity
+                    RecentActivityCard(
+                        recentActivity = recentActivity,
+                        onClearHistory = { dashboardViewModel.clearScanHistory() },
+                        onViewAll = {}
+                    )
                 }
             }
-            
-            // Store Information Card
-            StoreInfoCard(
-                uiState = uiState, 
-                storeInfo = storeInfo, 
-                storeSettings = storeSettings,
-                promotionalMode = dashboardViewModel.promotionalMode.collectAsStateWithLifecycle().value,
-                onTogglePromotionalMode = { dashboardViewModel.togglePromotionalMode() },
-                weeksBack = dashboardViewModel.weeksBack.collectAsStateWithLifecycle().value,
-                weekRangeText = dashboardViewModel.getWeekRangeText(),
-                onPreviousWeek = { dashboardViewModel.goToPreviousWeek() },
-                onNextWeek = { dashboardViewModel.goToNextWeek() },
-                transactionStats = transactionStats
-            )
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // Transaction Statistics Card
-            TransactionStatsCard(
-                stats = transactionStats ?: com.example.qonfetty.data.TransactionStats(
-                    totalPurchases = 0.0,
-                    totalClaimed = 0.0,
-                    totalTransactions = 0,
-                    totalPointsEarned = 0,
-                    totalPointsUsed = 0
-                ),
-                onRefresh = { dashboardViewModel.refreshDashboard() }
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // Recent Activity
-            RecentActivityCard(
-                recentActivity = recentActivity,
-                onClearHistory = { dashboardViewModel.clearScanHistory() },
-                onViewAll = {}
-            )
-        }
         
         // Pull to refresh indicator
         PullRefreshIndicator(
@@ -734,9 +734,10 @@ private fun StoreInfoCard(
                                         contentScale = ContentScale.Crop
                                     )
                                 } else {
-                                    // Fallback to initials
+                                    // Fallback to initials from store settings name
+                                    val displayName = storeSettings?.storeName?.takeIf { it.isNotEmpty() } ?: store.name
                                     Text(
-                                        text = store.name.take(2).uppercase(),
+                                        text = displayName.take(2).uppercase(),
                                         style = MaterialTheme.typography.titleLarge,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -775,67 +776,7 @@ private fun StoreInfoCard(
                 Spacer(modifier = Modifier.height(16.dp))
             }
             
-            // Week Navigation Filter
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(12.dp)
-                ) {
-                    Text(
-                        text = "Time Range",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Previous Week Button
-                        IconButton(
-                            onClick = onPreviousWeek,
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.ArrowBack,
-                                contentDescription = "Previous week",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                        
-                        // Current Week Range Text
-                        Text(
-                            text = weekRangeText,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.weight(1f)
-                        )
-                        
-                        // Next Week Button
-                        IconButton(
-                            onClick = onNextWeek,
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.ArrowForward,
-                                contentDescription = "Next week",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // Analytics Chart
+            // Combined Time Range and Analytics Chart
             transactionStats?.let { stats ->
                 // Debug logging for chart values
                 Log.d("DashboardScreen", "🔍 CHART: Rendering chart with stats - Purchases: ${stats.totalPurchases}, Claims: ${stats.totalClaimed}")
@@ -849,12 +790,54 @@ private fun StoreInfoCard(
                     Column(
                         modifier = Modifier.padding(12.dp)
                     ) {
+                        // Time Range Section
                         Text(
-                            text = "Purchases vs Claims",
+                            text = "Time Range",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Previous Week Button
+                            IconButton(
+                                onClick = onPreviousWeek,
+                                modifier = Modifier.size(40.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.ArrowBack,
+                                    contentDescription = "Previous week",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            
+                            // Current Week Range Text
+                            Text(
+                                text = weekRangeText,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.weight(1f)
+                            )
+                            
+                            // Next Week Button
+                            IconButton(
+                                onClick = onNextWeek,
+                                modifier = Modifier.size(40.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.ArrowForward,
+                                    contentDescription = "Next week",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
                         
                         // Check if there's any data for this time period
                         if (stats.totalPurchases == 0.0 && stats.totalClaimed == 0.0) {
