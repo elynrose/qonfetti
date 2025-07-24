@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
+
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.qonfetty.data.PointsTransaction
 import com.example.qonfetty.data.PointsTransactionWithCustomer
+import com.example.qonfetty.data.TransactionStats
 import com.example.qonfetty.nfc.NfcProcessingResult
 import com.example.qonfetty.ui.components.LiveDataIndicator
 import com.example.qonfetty.ui.theme.StatusBarSpacer
@@ -46,6 +48,7 @@ fun DashboardScreen(
     onShowNfcTest: () -> Unit = {},
     onShowRewards: () -> Unit = {},
     onShowSettings: () -> Unit = {},
+    onShowCustomerDetail: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -53,6 +56,8 @@ fun DashboardScreen(
     val scanHistory by dashboardViewModel.scanHistory.collectAsStateWithLifecycle()
     val recentActivity by dashboardViewModel.recentActivity.collectAsStateWithLifecycle()
     val lastScanResult by dashboardViewModel.lastScanResult.collectAsStateWithLifecycle()
+    val transactionStats by dashboardViewModel.transactionStats.collectAsStateWithLifecycle()
+    val storeInfo by dashboardViewModel.storeInfo.collectAsStateWithLifecycle()
     val refreshState by dashboardViewModel.refreshState.collectAsStateWithLifecycle()
     
     // Pull to refresh state
@@ -109,15 +114,27 @@ fun DashboardScreen(
                 ) {
                     NfcScanResultCard(
                         result = result,
-                        onDismiss = { dashboardViewModel.clearScanResult() }
+                        onDismiss = { dashboardViewModel.clearScanResult() },
+                        onShowCustomerDetail = onShowCustomerDetail,
+                        pointsAwarded = dashboardState !is DashboardUiState.ScanConfirmation
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                 }
             }
             
             // Store Information Card
-            StoreInfoCard(uiState = uiState)
+            StoreInfoCard(uiState = uiState, storeInfo = storeInfo)
             
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Transaction Statistics Card
+            TransactionStatsCard(stats = transactionStats ?: com.example.qonfetty.data.TransactionStats(
+                totalPurchases = 0.0,
+                totalClaimed = 0.0,
+                totalTransactions = 0,
+                totalPointsEarned = 0,
+                totalPointsUsed = 0
+            ))
             Spacer(modifier = Modifier.height(16.dp))
             
             // Recent Activity
@@ -141,7 +158,7 @@ fun DashboardScreen(
                 val result = state.result
                 if (result is com.example.qonfetty.nfc.NfcProcessingResult.Success) {
                     AlertDialog(
-                        onDismissRequest = { dashboardViewModel.clearScanResult() },
+                        onDismissRequest = { dashboardViewModel.showScanResultWithoutAwarding() },
                         title = {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -183,9 +200,9 @@ fun DashboardScreen(
                         },
                         dismissButton = {
                             TextButton(
-                                onClick = { dashboardViewModel.clearScanResult() }
+                                onClick = { dashboardViewModel.showScanResultWithoutAwarding() }
                             ) {
-                                Text("Cancel")
+                                Text("No, Don't Award")
                             }
                         }
                     )
@@ -402,7 +419,9 @@ private fun DashboardHeader(
 @Composable
 private fun NfcScanResultCard(
     result: com.example.qonfetty.nfc.NfcProcessingResult,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onShowCustomerDetail: (String) -> Unit,
+    pointsAwarded: Boolean = true
 ) {
     when (result) {
         is com.example.qonfetty.nfc.NfcProcessingResult.Success -> {
@@ -466,12 +485,12 @@ private fun NfcScanResultCard(
                         
                         Column(horizontalAlignment = Alignment.End) {
                             Text(
-                                text = "Points Added",
+                                text = if (pointsAwarded) "Points Added" else "Points Would Add",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                             )
                             Text(
-                                text = "+${result.pointsAwarded}",
+                                text = if (pointsAwarded) "+${result.pointsAwarded}" else "0",
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 fontWeight = FontWeight.Bold
@@ -491,7 +510,7 @@ private fun NfcScanResultCard(
                             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                         )
                         Text(
-                            text = "${result.newTotalPoints}",
+                            text = if (pointsAwarded) "${result.newTotalPoints}" else "${result.newTotalPoints - result.pointsAwarded}",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onPrimaryContainer,
                             fontWeight = FontWeight.Bold
@@ -515,6 +534,29 @@ private fun NfcScanResultCard(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Button(
+                            onClick = { onShowCustomerDetail(result.customer.id!!) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                contentColor = MaterialTheme.colorScheme.primaryContainer
+                            )
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Person,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text("View Customer Details")
+                            }
                         }
                     }
                 }
@@ -574,7 +616,10 @@ private fun NfcScanResultCard(
 }
 
 @Composable
-private fun StoreInfoCard(uiState: com.example.qonfetty.ui.AuthUiState) {
+private fun StoreInfoCard(
+    uiState: com.example.qonfetty.ui.AuthUiState,
+    storeInfo: com.example.qonfetty.data.Store?
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -601,6 +646,55 @@ private fun StoreInfoCard(uiState: com.example.qonfetty.ui.AuthUiState) {
             }
             
             Spacer(modifier = Modifier.height(12.dp))
+            
+            // Store Logo and Name
+            storeInfo?.let { store ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // Store Logo (using a placeholder icon for now)
+                    Card(
+                        modifier = Modifier.size(60.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        ),
+                        shape = MaterialTheme.shapes.medium
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = store.name.take(2).uppercase(),
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+                    
+                    // Store Name and Details
+                    Column(
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = store.name,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Store ID: ${store.id.take(8)}...",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+            }
             
             Text(
                 text = "You are successfully logged in to your store management dashboard.",
@@ -787,6 +881,137 @@ private fun ActivityItem(activity: PointsTransactionWithCustomer) {
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Medium
             )
+        }
+    }
+}
+
+@Composable
+private fun TransactionStatsCard(stats: TransactionStats) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Star,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onTertiaryContainer
+                )
+                Text(
+                    text = "Transaction Analytics",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // Purchase vs Claimed amounts
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.Start
+                ) {
+                    Text(
+                        text = "Total Purchases",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
+                    )
+                    Text(
+                        text = "$${String.format("%.2f", stats.totalPurchases)}",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                
+                Column(
+                    horizontalAlignment = Alignment.End
+                ) {
+                    Text(
+                        text = "Total Claimed",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
+                    )
+                    Text(
+                        text = "$${String.format("%.2f", stats.totalClaimed)}",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // Points earned vs used
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.Start
+                ) {
+                    Text(
+                        text = "Points Earned",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
+                    )
+                    Text(
+                        text = "${stats.totalPointsEarned}",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                
+                Column(
+                    horizontalAlignment = Alignment.End
+                ) {
+                    Text(
+                        text = "Points Used",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
+                    )
+                    Text(
+                        text = "${stats.totalPointsUsed}",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // Total transactions
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Total Transactions",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
+                )
+                Text(
+                    text = "${stats.totalTransactions}",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
     }
 } 

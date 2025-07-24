@@ -6,6 +6,7 @@ import com.example.qonfetty.data.SupabaseApi
 import com.example.qonfetty.data.SessionStorage
 import com.example.qonfetty.data.PointsTransaction
 import com.example.qonfetty.data.PointsTransactionWithCustomer
+import com.example.qonfetty.data.TransactionStats
 import com.example.qonfetty.data.DataRefreshManager
 import com.example.qonfetty.data.SessionManager
 import com.example.qonfetty.nfc.NfcManager
@@ -40,11 +41,19 @@ class DashboardViewModel(
     private val _recentActivity = MutableStateFlow<List<PointsTransactionWithCustomer>>(emptyList())
     val recentActivity: StateFlow<List<PointsTransactionWithCustomer>> = _recentActivity.asStateFlow()
     
+    private val _transactionStats = MutableStateFlow<TransactionStats?>(null)
+    val transactionStats: StateFlow<TransactionStats?> = _transactionStats.asStateFlow()
+    
+    private val _storeInfo = MutableStateFlow<com.example.qonfetty.data.Store?>(null)
+    val storeInfo: StateFlow<com.example.qonfetty.data.Store?> = _storeInfo.asStateFlow()
+    
     private val _refreshState = MutableStateFlow<DataRefreshManager.RefreshState>(DataRefreshManager.RefreshState.Idle)
     val refreshState: StateFlow<DataRefreshManager.RefreshState> = _refreshState.asStateFlow()
     
     init {
         loadRecentActivity()
+        loadTransactionStats()
+        loadStoreInfo()
         
         // Observe live data from DataRefreshManager if available
         dataRefreshManager?.let { manager ->
@@ -233,6 +242,18 @@ class DashboardViewModel(
     }
     
     /**
+     * Show scan result without awarding points (when user clicks "No")
+     */
+    fun showScanResultWithoutAwarding() {
+        val currentResult = _lastScanResult.value
+        if (currentResult is com.example.qonfetty.nfc.NfcProcessingResult.Success) {
+            // Change state to show the result without awarding points
+            _uiState.value = DashboardUiState.ScanSuccess(currentResult)
+            Log.d("DashboardViewModel", "Showing scan result without awarding points for: ${currentResult.customer.name}")
+        }
+    }
+    
+    /**
      * Clear scan result and return to idle state
      */
     fun clearScanResult() {
@@ -246,6 +267,71 @@ class DashboardViewModel(
     fun clearError() {
         if (_uiState.value is DashboardUiState.ScanError) {
             _uiState.value = DashboardUiState.Idle
+        }
+    }
+    
+    /**
+     * Load store information
+     */
+    fun loadStoreInfo() {
+        viewModelScope.launch {
+            try {
+                val authToken = sessionStorage.getAuthToken()
+                val userId = sessionStorage.getUserId()
+                
+                if (authToken == null || userId == null) {
+                    Log.w("DashboardViewModel", "Not authenticated, cannot load store info")
+                    return@launch
+                }
+                
+                val result = supabaseApi.getStoreByOwnerId(userId, authToken)
+                
+                result.fold(
+                    onSuccess = { store ->
+                        Log.d("DashboardViewModel", "Successfully loaded store info: ${store?.name}")
+                        _storeInfo.value = store
+                    },
+                    onFailure = { exception ->
+                        Log.e("DashboardViewModel", "Failed to load store info: ${exception.message}", exception)
+                        SessionUtils.handleSessionExpiration(sessionManager, exception.message)
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e("DashboardViewModel", "Error loading store info: ${e.message}", e)
+            }
+        }
+    }
+    
+    /**
+     * Load transaction statistics for dashboard
+     */
+    fun loadTransactionStats() {
+        viewModelScope.launch {
+            try {
+                val authToken = sessionStorage.getAuthToken()
+                val storeId = sessionStorage.getStoreId()
+                
+                if (authToken == null || storeId == null) {
+                    Log.w("DashboardViewModel", "Not authenticated or no store ID, cannot load transaction stats")
+                    return@launch
+                }
+                
+                val result = supabaseApi.getTransactionStats(storeId, authToken)
+                
+                result.fold(
+                    onSuccess = { stats ->
+                        Log.d("DashboardViewModel", "Successfully loaded transaction stats: $stats")
+                        _transactionStats.value = stats
+                    },
+                    onFailure = { exception ->
+                        Log.e("DashboardViewModel", "Failed to load transaction stats: ${exception.message}", exception)
+                        // Don't treat this as a session expiration error since it might just be no data
+                        Log.w("DashboardViewModel", "Transaction stats error (might be no data): ${exception.message}")
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e("DashboardViewModel", "Error loading transaction stats: ${e.message}", e)
+            }
         }
     }
     

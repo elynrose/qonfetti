@@ -44,6 +44,7 @@ fun CustomerDetailScreen(
     customerWithPoints: CustomerWithPoints,
     viewModel: CustomerDetailViewModel,
     onBack: () -> Unit,
+    onClaimReward: (CustomerWithPoints, com.example.qonfetty.data.Reward) -> Unit,
     nfcManager: NfcManager?,
     modifier: Modifier = Modifier
 ) {
@@ -180,9 +181,7 @@ fun CustomerDetailScreen(
                             RewardCard(
                                 reward = reward,
                                 onClaim = { 
-                                    customer.id?.let { customerId ->
-                                        viewModel.claimReward(reward, customerId)
-                                    }
+                                    onClaimReward(customerWithPoints, reward)
                                 }
                             )
                         }

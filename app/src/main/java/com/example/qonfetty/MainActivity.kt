@@ -45,6 +45,8 @@ import com.example.qonfetty.ui.RewardsScreen
 import com.example.qonfetty.ui.RewardsViewModel
 import com.example.qonfetty.ui.StoreSettingsScreen
 import com.example.qonfetty.ui.StoreSettingsViewModel
+import com.example.qonfetty.ui.ClaimsScreen
+import com.example.qonfetty.ui.ClaimsViewModel
 
 class MainActivity : ComponentActivity() {
     
@@ -89,10 +91,12 @@ class MainActivity : ComponentActivity() {
                     var supabaseApi by remember { mutableStateOf<SupabaseApi?>(null) }
                     var showCustomers by remember { mutableStateOf(false) }
                     var selectedCustomer by remember { mutableStateOf<CustomerWithPoints?>(null) }
+                    var showCustomerDetailFromDashboard by remember { mutableStateOf<String?>(null) }
                     var showNfcScanResult by remember { mutableStateOf(false) }
                     var showNfcTest by remember { mutableStateOf(false) }
                     var showRewards by remember { mutableStateOf(false) }
                     var showSettings by remember { mutableStateOf(false) }
+                    var showClaims by remember { mutableStateOf<Pair<CustomerWithPoints, com.example.qonfetty.data.Reward>?>(null) }
                     var inactivityMessage by remember { mutableStateOf<String?>(null) }
                     
                     // Initialize environment configuration
@@ -294,6 +298,19 @@ class MainActivity : ComponentActivity() {
                                     onBack = { showSettings = false }
                                 )
                             }
+                            showClaims != null -> {
+                                val (customer, reward) = showClaims!!
+                                val claimsViewModel: ClaimsViewModel = viewModel {
+                                    ClaimsViewModel(supabaseApi!!, sessionStorage)
+                                }
+                                
+                                ClaimsScreen(
+                                    customer = customer,
+                                    reward = reward,
+                                    viewModel = claimsViewModel,
+                                    onBack = { showClaims = null }
+                                )
+                            }
                             selectedCustomer != null -> {
                                 val customerDetailViewModel: CustomerDetailViewModel = viewModel {
                                     CustomerDetailViewModel(supabaseApi!!, sessionStorage, globalDataRefreshManager)
@@ -316,8 +333,47 @@ class MainActivity : ComponentActivity() {
                                     customerWithPoints = selectedCustomer!!,
                                     viewModel = customerDetailViewModel,
                                     onBack = { selectedCustomer = null },
+                                    onClaimReward = { customer, reward -> showClaims = customer to reward },
                                     nfcManager = nfcManager
                                 )
+                            }
+                            showCustomerDetailFromDashboard != null -> {
+                                val customerDetailViewModel: CustomerDetailViewModel = viewModel {
+                                    CustomerDetailViewModel(supabaseApi!!, sessionStorage, globalDataRefreshManager)
+                                }
+                                
+                                // Check if we need to redirect to login due to auth error
+                                val nfcOperationState by customerDetailViewModel.nfcOperationState.collectAsStateWithLifecycle()
+                                
+                                LaunchedEffect(nfcOperationState) {
+                                    val currentState = nfcOperationState
+                                    if (currentState is NfcOperationState.Error && 
+                                        currentState.message.contains("Session expired")) {
+                                        inactivityMessage = "You were logged out because of inactivity. Please log back in."
+                                        viewModel.logout()
+                                        showCustomerDetailFromDashboard = null
+                                    }
+                                }
+                                
+                                // Load customer data by ID
+                                LaunchedEffect(showCustomerDetailFromDashboard) {
+                                    val customerId = showCustomerDetailFromDashboard
+                                    if (customerId != null) {
+                                        customerDetailViewModel.loadCustomerById(customerId)
+                                    }
+                                }
+                                
+                                val customerWithPoints by customerDetailViewModel.customerWithPoints.collectAsStateWithLifecycle()
+                                
+                                customerWithPoints?.let { customer ->
+                                    CustomerDetailScreen(
+                                        customerWithPoints = customer,
+                                        viewModel = customerDetailViewModel,
+                                        onBack = { showCustomerDetailFromDashboard = null },
+                                        onClaimReward = { customerWithPoints, reward -> showClaims = customerWithPoints to reward },
+                                        nfcManager = nfcManager
+                                    )
+                                }
                             }
                             showCustomers -> {
                                 val customerViewModel: CustomerViewModel = viewModel {
@@ -363,7 +419,8 @@ class MainActivity : ComponentActivity() {
                                         onShowCustomers = { showCustomers = true },
                                         onShowNfcTest = { showNfcTest = true },
                                         onShowRewards = { showRewards = true },
-                                        onShowSettings = { showSettings = true }
+                                        onShowSettings = { showSettings = true },
+                                        onShowCustomerDetail = { customerId -> showCustomerDetailFromDashboard = customerId }
                                     )
                                 }
                             }

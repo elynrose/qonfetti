@@ -178,6 +178,8 @@ data class NfcCardRegistration(
     val isActive: Boolean = true
 )
 
+
+
 @Serializable
 data class Reward(
     val id: String,

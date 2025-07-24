@@ -48,6 +48,41 @@ class CustomerDetailViewModel(
     // Current customer ID for live updates
     private var currentCustomerId: String? = null
     
+    private val _customerWithPoints = MutableStateFlow<CustomerWithPoints?>(null)
+    val customerWithPoints: StateFlow<CustomerWithPoints?> = _customerWithPoints.asStateFlow()
+    
+    fun loadCustomerById(customerId: String) {
+        viewModelScope.launch {
+            try {
+                val authToken = sessionStorage.getAuthToken()
+                val storeId = sessionStorage.getStoreId()
+                
+                if (authToken == null || storeId == null) {
+                    return@launch
+                }
+                
+                val result = supabaseApi.getCustomer(customerId, storeId, authToken)
+                
+                result.fold(
+                    onSuccess = { customerWithPoints ->
+                        _customerWithPoints.value = customerWithPoints
+                        if (customerWithPoints != null) {
+                            loadCustomerData(customerId)
+                        }
+                        Log.d("CustomerDetailViewModel", "Loaded customer by ID: ${customerWithPoints?.customer?.name}")
+                    },
+                    onFailure = { exception ->
+                        Log.e("CustomerDetailViewModel", "Failed to load customer by ID: ${exception.message}", exception)
+                        _customerWithPoints.value = null
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e("CustomerDetailViewModel", "Error loading customer by ID: ${e.message}", e)
+                _customerWithPoints.value = null
+            }
+        }
+    }
+    
     fun loadCustomerData(customerId: String) {
         currentCustomerId = customerId
         loadCustomerNfcCards(customerId)

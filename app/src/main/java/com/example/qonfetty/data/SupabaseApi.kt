@@ -1222,6 +1222,42 @@ class SupabaseApi(private val environmentConfig: EnvironmentConfig) {
     }
     
     /**
+     * Get a specific reward by ID
+     */
+    suspend fun getReward(rewardId: String, authToken: String): Result<Reward> {
+        return try {
+            Log.d("SupabaseApi", "Fetching reward: $rewardId")
+            
+            val response = client.get("$baseUrl/rest/v1/rewards") {
+                headers {
+                    append("apikey", anonKey)
+                    append("Authorization", "Bearer $authToken")
+                }
+                parameter("select", "*")
+                parameter("id", "eq.$rewardId")
+            }
+            
+            if (response.status.isSuccess()) {
+                val rewards = response.body<List<Reward>>()
+                if (rewards.isNotEmpty()) {
+                    Log.d("SupabaseApi", "Successfully fetched reward: ${rewards.first().name}")
+                    Result.success(rewards.first())
+                } else {
+                    Log.e("SupabaseApi", "Reward not found: $rewardId")
+                    Result.failure(Exception("Reward not found"))
+                }
+            } else {
+                val errorBody = response.body<String>()
+                Log.e("SupabaseApi", "Failed to fetch reward: ${response.status}, body: $errorBody")
+                Result.failure(Exception("Failed to fetch reward: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            Log.e("SupabaseApi", "Error fetching reward: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
      * Get all rewards for a store
      */
     suspend fun getRewards(storeId: String, authToken: String): Result<List<Reward>> {
@@ -1704,6 +1740,149 @@ class SupabaseApi(private val environmentConfig: EnvironmentConfig) {
             }
         } catch (e: Exception) {
             Log.e("SupabaseApi", "Error fetching categories: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Claim a reward for a customer
+     */
+    suspend fun claimReward(request: ClaimRewardRequest, storeId: String, authToken: String): Result<Transaction> {
+        return try {
+            Log.d("SupabaseApi", "Claiming reward for customer: ${request.customerId}, reward: ${request.rewardId}")
+            
+            // First, get the reward details to know how many points it costs
+            val rewardResult = getReward(request.rewardId, authToken)
+            val reward = rewardResult.getOrNull()
+            if (reward == null) {
+                return Result.failure(Exception("Reward not found"))
+            }
+            
+            // Create transaction data
+            val transactionData = mapOf(
+                "store_id" to storeId,
+                "customer_id" to request.customerId,
+                "reward_id" to request.rewardId,
+                "transaction_type" to "reward_claim",
+                "amount" to request.amount,
+                "points_used" to reward.pointsRequired,
+                "points_earned" to 0,
+                "description" to (request.description ?: "Reward claimed: ${reward.name}")
+            )
+            
+            // Convert to JSON string manually to avoid serialization issues
+            val jsonString = buildJsonObject {
+                transactionData.forEach { (key, value) ->
+                    when (value) {
+                        is String -> put(key, value)
+                        is Int -> put(key, value)
+                        is Double -> put(key, value)
+                        is Boolean -> put(key, value)
+                        null -> put(key, "")
+                        else -> put(key, value.toString())
+                    }
+                }
+            }.toString()
+            
+            val response = client.post("$baseUrl/rest/v1/transactions") {
+                contentType(ContentType.Application.Json)
+                headers {
+                    append("apikey", anonKey)
+                    append("Authorization", "Bearer $authToken")
+                    append("Prefer", "return=representation")
+                }
+                setBody(jsonString)
+            }
+            
+            if (response.status.isSuccess()) {
+                // Supabase returns an array with return=representation, so we need to handle that
+                val transactions = response.body<List<Transaction>>()
+                if (transactions.isNotEmpty()) {
+                    val transaction = transactions.first()
+                    Log.d("SupabaseApi", "Reward claimed successfully: ${transaction.id}")
+                    Result.success(transaction)
+                } else {
+                    Log.e("SupabaseApi", "No transaction returned from claim")
+                    Result.failure(Exception("No transaction returned from claim"))
+                }
+            } else {
+                val errorBody = response.body<String>()
+                Log.e("SupabaseApi", "Failed to claim reward: ${response.status}, body: $errorBody")
+                Result.failure(Exception("Failed to claim reward: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            Log.e("SupabaseApi", "Error claiming reward: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Get transaction statistics for dashboard
+     */
+    suspend fun getTransactionStats(storeId: String, authToken: String): Result<TransactionStats> {
+        return try {
+            Log.d("SupabaseApi", "Fetching transaction stats for store: $storeId")
+            
+            val response = client.post("$baseUrl/rest/v1/rpc/get_transaction_stats") {
+                contentType(ContentType.Application.Json)
+                headers {
+                    append("apikey", anonKey)
+                    append("Authorization", "Bearer $authToken")
+                }
+                setBody(mapOf("store_id_param" to storeId))
+            }
+            
+            if (response.status.isSuccess()) {
+                // RPC functions return an array, so we need to handle that
+                val statsArray = response.body<List<TransactionStats>>()
+                if (statsArray.isNotEmpty()) {
+                    val stats = statsArray.first()
+                    Log.d("SupabaseApi", "Transaction stats fetched successfully: $stats")
+                    Result.success(stats)
+                } else {
+                    Log.e("SupabaseApi", "No transaction stats returned")
+                    Result.failure(Exception("No transaction stats returned"))
+                }
+            } else {
+                val errorBody = response.body<String>()
+                Log.e("SupabaseApi", "Failed to fetch transaction stats: ${response.status}, body: $errorBody")
+                Result.failure(Exception("Failed to fetch transaction stats: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            Log.e("SupabaseApi", "Error fetching transaction stats: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Get recent transactions for a store
+     */
+    suspend fun getRecentTransactions(storeId: String, limit: Int = 10, authToken: String): Result<List<Transaction>> {
+        return try {
+            Log.d("SupabaseApi", "Fetching recent transactions for store: $storeId")
+            
+            val response = client.get("$baseUrl/rest/v1/transactions") {
+                headers {
+                    append("apikey", anonKey)
+                    append("Authorization", "Bearer $authToken")
+                }
+                parameter("select", "*")
+                parameter("store_id", "eq.$storeId")
+                parameter("order", "created_at.desc")
+                parameter("limit", limit.toString())
+            }
+            
+            if (response.status.isSuccess()) {
+                val transactions = response.body<List<Transaction>>()
+                Log.d("SupabaseApi", "Fetched ${transactions.size} recent transactions")
+                Result.success(transactions)
+            } else {
+                val errorBody = response.body<String>()
+                Log.e("SupabaseApi", "Failed to fetch recent transactions: ${response.status}, body: $errorBody")
+                Result.failure(Exception("Failed to fetch recent transactions: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            Log.e("SupabaseApi", "Error fetching recent transactions: ${e.message}", e)
             Result.failure(e)
         }
     }
