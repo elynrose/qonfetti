@@ -3,6 +3,8 @@ package com.example.qonfetty.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.qonfetty.data.*
+import com.example.qonfetty.data.SessionManager
+import com.example.qonfetty.util.SessionUtils
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,7 +28,8 @@ sealed class RewardsOperationState {
 class RewardsViewModel(
     private val supabaseApi: SupabaseApi,
     private val sessionStorage: SessionStorage,
-    private val dataRefreshManager: DataRefreshManager? = null
+    private val dataRefreshManager: DataRefreshManager? = null,
+    private val sessionManager: SessionManager? = null
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow<RewardsUiState>(RewardsUiState.Loading)
@@ -44,8 +47,54 @@ class RewardsViewModel(
     private val _selectedCategory = MutableStateFlow<String?>(null)
     val selectedCategory: StateFlow<String?> = _selectedCategory.asStateFlow()
     
+    private val _refreshState = MutableStateFlow<DataRefreshManager.RefreshState>(DataRefreshManager.RefreshState.Idle)
+    val refreshState: StateFlow<DataRefreshManager.RefreshState> = _refreshState.asStateFlow()
+    
+    private val _categories = MutableStateFlow<List<Category>>(emptyList())
+    val categories: StateFlow<List<Category>> = _categories.asStateFlow()
+    
+    // Hardcoded categories for now
+    private val hardcodedCategories = listOf(
+        Category(id = "1", name = "Retail"),
+        Category(id = "2", name = "Restaurant"),
+        Category(id = "3", name = "Coffee Shop"),
+        Category(id = "4", name = "Grocery"),
+        Category(id = "5", name = "Pharmacy"),
+        Category(id = "6", name = "Beauty & Health"),
+        Category(id = "7", name = "Electronics"),
+        Category(id = "8", name = "Fashion"),
+        Category(id = "9", name = "Home & Garden"),
+        Category(id = "10", name = "Sports & Fitness"),
+        Category(id = "11", name = "Entertainment"),
+        Category(id = "12", name = "Automotive"),
+        Category(id = "13", name = "Education"),
+        Category(id = "14", name = "Professional Services"),
+        Category(id = "15", name = "Other")
+    )
+    
     init {
         loadRewards()
+        loadCategories()
+        
+        // Observe live data from DataRefreshManager if available
+        dataRefreshManager?.let { manager ->
+            viewModelScope.launch {
+                manager.rewardsData.collect { rewards ->
+                    if (rewards.isNotEmpty()) {
+                        _rewards.value = rewards
+                        _uiState.value = RewardsUiState.Success(rewards)
+                        Log.d("RewardsViewModel", "Received live update: ${rewards.size} rewards")
+                    }
+                }
+            }
+            
+            // Observe refresh state
+            viewModelScope.launch {
+                manager.refreshState.collect { state ->
+                    _refreshState.value = state
+                }
+            }
+        }
     }
     
     fun loadRewards() {
@@ -70,15 +119,9 @@ class RewardsViewModel(
                         Log.d("RewardsViewModel", "Loaded ${rewards.size} rewards")
                     },
                     onFailure = { exception ->
-                        if (exception.message?.contains("401") == true || 
-                            exception.message?.contains("Unauthorized") == true) {
-                            Log.w("RewardsViewModel", "Authentication failed, clearing session")
-                            sessionStorage.clearSession()
-                            _uiState.value = RewardsUiState.Error("Session expired. Please login again.")
-                        } else {
-                            _uiState.value = RewardsUiState.Error(exception.message ?: "Failed to load rewards")
-                        }
                         Log.e("RewardsViewModel", "Failed to load rewards: ${exception.message}", exception)
+                        SessionUtils.handleSessionExpiration(sessionManager, exception.message)
+                        _uiState.value = RewardsUiState.Error(exception.message ?: "Failed to load rewards")
                     }
                 )
             } catch (e: Exception) {
@@ -86,6 +129,12 @@ class RewardsViewModel(
                 Log.e("RewardsViewModel", "Error loading rewards: ${e.message}", e)
             }
         }
+    }
+    
+    fun loadCategories() {
+        // Use hardcoded categories for now
+        _categories.value = hardcodedCategories
+        Log.d("RewardsViewModel", "Loaded ${hardcodedCategories.size} hardcoded categories")
     }
     
     fun createRewardWithImage(
@@ -197,6 +246,27 @@ class RewardsViewModel(
                 rewardData["store_id"] = storeId
                 rewardData["is_active"] = true.toString()
                 
+                // Add price if provided
+                price?.let { priceValue ->
+                    rewardData["price"] = priceValue.toString()
+                    Log.d("RewardsViewModel", "Adding price to reward: $priceValue")
+                }
+                
+                // Add quantity if provided
+                quantity?.let { quantityValue ->
+                    rewardData["quantity"] = quantityValue.toString()
+                    Log.d("RewardsViewModel", "Adding quantity to reward: $quantityValue")
+                }
+                
+                // Add category if provided
+                category?.let { categoryValue ->
+                    rewardData["category"] = categoryValue
+                    Log.d("RewardsViewModel", "Adding category to reward: $categoryValue")
+                }
+                
+                // Add is_shared if provided
+                rewardData["is_shared"] = isShared.toString()
+                
                 // Add photo URL if provided
                 photo?.let { photoUrl ->
                     rewardData["photo"] = photoUrl
@@ -245,6 +315,18 @@ class RewardsViewModel(
                 rewardData["is_active"] = reward.isActive.toString()
                 rewardData["category"] = reward.category ?: "general"
                 rewardData["is_shared"] = reward.isShared.toString()
+                
+                // Add price if it exists
+                reward.price?.let { price ->
+                    rewardData["price"] = price.toString()
+                    Log.d("RewardsViewModel", "Adding price to reward update: $price")
+                }
+                
+                // Add quantity if it exists
+                reward.quantity?.let { quantity ->
+                    rewardData["quantity"] = quantity.toString()
+                    Log.d("RewardsViewModel", "Adding quantity to reward update: $quantity")
+                }
                 
                 // Add photo URL if it exists
                 reward.photo?.let { photoUrl ->
@@ -375,6 +457,6 @@ class RewardsViewModel(
     }
     
     fun getCategories(): List<String> {
-        return _rewards.value.mapNotNull { it.category }.distinct().sorted()
+        return hardcodedCategories.map { it.name }
     }
 } 

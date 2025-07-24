@@ -35,6 +35,7 @@ import com.example.qonfetty.data.NfcOperationState
 import com.example.qonfetty.data.Reward
 import com.example.qonfetty.nfc.NfcManager
 import com.example.qonfetty.nfc.NfcWriteManager
+import com.example.qonfetty.ui.theme.StatusBarSpacer
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterialApi::class)
@@ -79,7 +80,7 @@ fun CustomerDetailScreen(
         modifier = modifier.fillMaxSize()
     ) {
         // Add top spacing to avoid status bar
-        Spacer(modifier = Modifier.height(48.dp))
+        StatusBarSpacer()
         
         // Content with proper padding and pull to refresh
         Box(

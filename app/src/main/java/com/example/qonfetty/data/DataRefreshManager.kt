@@ -23,6 +23,7 @@ class DataRefreshManager(
         const val DASHBOARD_REFRESH_INTERVAL = 15_000L // 15 seconds
         const val ACTIVITY_REFRESH_INTERVAL = 10_000L // 10 seconds
         const val POINTS_REFRESH_INTERVAL = 20_000L // 20 seconds
+        const val REWARDS_REFRESH_INTERVAL = 25_000L // 25 seconds
     }
     
     // State flows for different data types
@@ -35,6 +36,9 @@ class DataRefreshManager(
     private val _customerPointsData = MutableStateFlow<Map<String, Int>>(emptyMap())
     val customerPointsData: StateFlow<Map<String, Int>> = _customerPointsData.asStateFlow()
     
+    private val _rewardsData = MutableStateFlow<List<Reward>>(emptyList())
+    val rewardsData: StateFlow<List<Reward>> = _rewardsData.asStateFlow()
+    
     // Refresh state
     private val _refreshState = MutableStateFlow<RefreshState>(RefreshState.Idle)
     val refreshState: StateFlow<RefreshState> = _refreshState.asStateFlow()
@@ -44,6 +48,7 @@ class DataRefreshManager(
     private var dashboardRefreshJob: Job? = null
     private var activityRefreshJob: Job? = null
     private var pointsRefreshJob: Job? = null
+    private var rewardsRefreshJob: Job? = null
     
     sealed class RefreshState {
         object Idle : RefreshState()
@@ -72,6 +77,11 @@ class DataRefreshManager(
         pointsRefreshJob = startPeriodicJob(POINTS_REFRESH_INTERVAL) {
             refreshCustomerPoints()
         }
+        
+        // Start rewards refresh
+        rewardsRefreshJob = startPeriodicJob(REWARDS_REFRESH_INTERVAL) {
+            refreshRewards()
+        }
     }
     
     /**
@@ -84,11 +94,13 @@ class DataRefreshManager(
         dashboardRefreshJob?.cancel()
         activityRefreshJob?.cancel()
         pointsRefreshJob?.cancel()
+        rewardsRefreshJob?.cancel()
         
         customersRefreshJob = null
         dashboardRefreshJob = null
         activityRefreshJob = null
         pointsRefreshJob = null
+        rewardsRefreshJob = null
     }
     
     /**
@@ -233,6 +245,37 @@ class DataRefreshManager(
     }
     
     /**
+     * Refresh rewards data
+     */
+    private suspend fun refreshRewards(): Result<Unit> {
+        return try {
+            val authToken = sessionStorage.getAuthToken()
+            val storeId = sessionStorage.getStoreId()
+            
+            if (authToken == null || storeId == null) {
+                Log.w("DataRefreshManager", "No auth token or store ID available for rewards refresh")
+                return Result.failure(Exception("Not authenticated or no store"))
+            }
+            
+            val result = supabaseApi.getRewards(storeId, authToken)
+            result.fold(
+                onSuccess = { rewards ->
+                    _rewardsData.value = rewards
+                    Log.d("DataRefreshManager", "Refreshed ${rewards.size} rewards")
+                    Result.success(Unit)
+                },
+                onFailure = { exception ->
+                    Log.e("DataRefreshManager", "Failed to refresh rewards: ${exception.message}", exception)
+                    Result.failure(exception)
+                }
+            )
+        } catch (e: Exception) {
+            Log.e("DataRefreshManager", "Error refreshing rewards: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
      * Start a periodic job with the given interval
      */
     private fun startPeriodicJob(interval: Long, block: suspend () -> Unit): Job {
@@ -257,12 +300,13 @@ class DataRefreshManager(
                 DataType.CUSTOMERS -> refreshCustomers()
                 DataType.ACTIVITY -> refreshRecentActivity()
                 DataType.POINTS -> refreshCustomerPoints()
+                DataType.REWARDS -> refreshRewards()
             }
         }
     }
     
     enum class DataType {
-        CUSTOMERS, ACTIVITY, POINTS
+        CUSTOMERS, ACTIVITY, POINTS, REWARDS
     }
     
     /**

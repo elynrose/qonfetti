@@ -17,6 +17,8 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,6 +33,7 @@ import com.example.qonfetty.data.PointsTransaction
 import com.example.qonfetty.data.PointsTransactionWithCustomer
 import com.example.qonfetty.nfc.NfcProcessingResult
 import com.example.qonfetty.ui.components.LiveDataIndicator
+import com.example.qonfetty.ui.theme.StatusBarSpacer
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -42,6 +45,7 @@ fun DashboardScreen(
     onShowCustomers: () -> Unit = {},
     onShowNfcTest: () -> Unit = {},
     onShowRewards: () -> Unit = {},
+    onShowSettings: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -58,28 +62,40 @@ fun DashboardScreen(
         onRefresh = { /* Dashboard doesn't need refresh, but we can clear scan history */ }
     )
     
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .pullRefresh(pullRefreshState)
+    Column(
+        modifier = modifier.fillMaxSize()
     ) {
-        Column(
+        // Add top spacing to avoid status bar
+        StatusBarSpacer()
+        
+        // Content with proper padding and pull to refresh
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+                .pullRefresh(pullRefreshState)
         ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
             // Live data indicator
             LiveDataIndicator(
                 refreshState = refreshState,
                 modifier = Modifier.align(Alignment.End)
             )
             
-            // Header with NFC status
+            // Header with NFC status and menu
             DashboardHeader(
                 dashboardState = dashboardState,
-                onClearError = { dashboardViewModel.clearError() }
+                onClearError = { dashboardViewModel.clearError() },
+                onShowCustomers = onShowCustomers,
+                onShowNfcTest = onShowNfcTest,
+                onShowRewards = onShowRewards,
+                onShowSettings = onShowSettings,
+                onLogout = { viewModel.logout() }
             )
             
             Spacer(modifier = Modifier.height(16.dp))
@@ -104,16 +120,7 @@ fun DashboardScreen(
             
             Spacer(modifier = Modifier.height(16.dp))
             
-            // Action Buttons
-            ActionButtonsCard(
-                onShowCustomers = onShowCustomers,
-                onShowNfcTest = onShowNfcTest,
-                onShowRewards = onShowRewards,
-                onLogout = { viewModel.logout() }
-            )
-            
             // Recent Activity
-            Spacer(modifier = Modifier.height(16.dp))
             RecentActivityCard(
                 recentActivity = recentActivity,
                 onClearHistory = { dashboardViewModel.clearScanHistory() },
@@ -127,13 +134,78 @@ fun DashboardScreen(
             state = pullRefreshState,
             modifier = Modifier.align(Alignment.TopCenter)
         )
+        
+        // Confirmation Dialog for NFC Points Award
+        when (val state = dashboardState) {
+            is DashboardUiState.ScanConfirmation -> {
+                val result = state.result
+                if (result is com.example.qonfetty.nfc.NfcProcessingResult.Success) {
+                    AlertDialog(
+                        onDismissRequest = { dashboardViewModel.clearScanResult() },
+                        title = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    Icons.Filled.Star,
+                                    contentDescription = "Award Points",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Text("Award Points")
+                            }
+                        },
+                        text = {
+                            Column {
+                                Text(
+                                    text = "Award ${result.pointsAwarded} point(s) to ${result.customer.name}?",
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Current points: ${result.newTotalPoints - result.pointsAwarded}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "New total: ${result.newTotalPoints}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = { dashboardViewModel.confirmAndAwardPoints() }
+                            ) {
+                                Text("Yes, Award Points")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = { dashboardViewModel.clearScanResult() }
+                            ) {
+                                Text("Cancel")
+                            }
+                        }
+                    )
+                }
+            }
+            else -> {}
+        }
+        }
     }
 }
 
 @Composable
 private fun DashboardHeader(
     dashboardState: DashboardUiState,
-    onClearError: () -> Unit
+    onClearError: () -> Unit,
+    onShowCustomers: () -> Unit,
+    onShowNfcTest: () -> Unit,
+    onShowRewards: () -> Unit,
+    onShowSettings: () -> Unit,
+    onLogout: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -161,50 +233,132 @@ private fun DashboardHeader(
                 )
             }
             
-            // NFC Status Icon
-            when (dashboardState) {
-                is DashboardUiState.Scanning -> {
-                    val infiniteTransition = rememberInfiniteTransition(label = "scanning")
-                    val rotation by infiniteTransition.animateFloat(
-                        initialValue = 0f,
-                        targetValue = 360f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(1000, easing = LinearEasing),
-                            repeatMode = RepeatMode.Restart
-                        ),
-                        label = "rotation"
-                    )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // NFC Status Icon
+                when (dashboardState) {
+                    is DashboardUiState.Scanning -> {
+                        val infiniteTransition = rememberInfiniteTransition(label = "scanning")
+                        val rotation by infiniteTransition.animateFloat(
+                            initialValue = 0f,
+                            targetValue = 360f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(1000, easing = LinearEasing),
+                                repeatMode = RepeatMode.Restart
+                            ),
+                            label = "rotation"
+                        )
+                        
+                        Icon(
+                            imageVector = Icons.Filled.Star,
+                            contentDescription = "Scanning NFC",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                    is DashboardUiState.ScanConfirmation -> {
+                        Icon(
+                            imageVector = Icons.Filled.Star,
+                            contentDescription = "Awaiting confirmation",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                    is DashboardUiState.ScanSuccess -> {
+                        Icon(
+                            imageVector = Icons.Filled.CheckCircle,
+                            contentDescription = "Scan successful",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                    is DashboardUiState.ScanError -> {
+                        Icon(
+                            imageVector = Icons.Filled.Warning,
+                            contentDescription = "Scan error",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                    else -> {
+                        Icon(
+                            imageVector = Icons.Filled.Star,
+                            contentDescription = "Ready for NFC",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                }
+                
+                // Hamburger Menu
+                var expanded by remember { mutableStateOf(false) }
+                Box {
+                    IconButton(onClick = { expanded = true }) {
+                        Icon(
+                            imageVector = Icons.Filled.Menu,
+                            contentDescription = "Menu",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                     
-                    Icon(
-                        imageVector = Icons.Filled.Star,
-                        contentDescription = "Scanning NFC",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
-                is DashboardUiState.ScanSuccess -> {
-                    Icon(
-                        imageVector = Icons.Filled.CheckCircle,
-                        contentDescription = "Scan successful",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
-                is DashboardUiState.ScanError -> {
-                    Icon(
-                        imageVector = Icons.Filled.Warning,
-                        contentDescription = "Scan error",
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
-                else -> {
-                    Icon(
-                        imageVector = Icons.Filled.Star,
-                        contentDescription = "Ready for NFC",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(32.dp)
-                    )
+                    DropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Manage Customers") },
+                            leadingIcon = { 
+                                Icon(Icons.Filled.Person, contentDescription = null)
+                            },
+                            onClick = {
+                                onShowCustomers()
+                                expanded = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Write to Card") },
+                            leadingIcon = { 
+                                Icon(Icons.Filled.Star, contentDescription = null)
+                            },
+                            onClick = {
+                                onShowNfcTest()
+                                expanded = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Manage Rewards") },
+                            leadingIcon = { 
+                                Icon(Icons.Filled.Star, contentDescription = null)
+                            },
+                            onClick = {
+                                onShowRewards()
+                                expanded = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Store Settings") },
+                            leadingIcon = { 
+                                Icon(Icons.Filled.Settings, contentDescription = null)
+                            },
+                            onClick = {
+                                onShowSettings()
+                                expanded = false
+                            }
+                        )
+                        Divider()
+                        DropdownMenuItem(
+                            text = { Text("Logout") },
+                            leadingIcon = { 
+                                Icon(Icons.Filled.ExitToApp, contentDescription = null)
+                            },
+                            onClick = {
+                                onLogout()
+                                expanded = false
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -479,87 +633,7 @@ private fun StoreInfoCard(uiState: com.example.qonfetty.ui.AuthUiState) {
     }
 }
 
-@Composable
-private fun ActionButtonsCard(
-    onShowCustomers: () -> Unit,
-    onShowNfcTest: () -> Unit,
-    onShowRewards: () -> Unit = {},
-    onLogout: () -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Text(
-                text = "Quick Actions",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
-            
-            Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Button(
-                    onClick = onShowCustomers,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Person,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Manage Customers")
-                }
-                
-                Button(
-                    onClick = onShowNfcTest,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Star,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Write to Card")
-                }
-                
-                Button(
-                    onClick = onShowRewards,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Star,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Manage Rewards")
-                }
-                
-                OutlinedButton(
-                    onClick = onLogout,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.ExitToApp,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Logout")
-                }
-            }
-        }
-    }
-}
+
 
 @Composable
 private fun RecentActivityCard(
@@ -627,18 +701,8 @@ private fun RecentActivityCard(
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(recentActivity.take(10)) { transaction ->
+                    items(recentActivity) { transaction ->
                         ActivityItem(activity = transaction)
-                    }
-                }
-                
-                if (recentActivity.size > 10) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    TextButton(
-                        onClick = onViewAll,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("View All ${recentActivity.size} Transactions")
                     }
                 }
             }

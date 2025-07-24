@@ -7,9 +7,11 @@ import com.example.qonfetty.data.SessionStorage
 import com.example.qonfetty.data.PointsTransaction
 import com.example.qonfetty.data.PointsTransactionWithCustomer
 import com.example.qonfetty.data.DataRefreshManager
+import com.example.qonfetty.data.SessionManager
 import com.example.qonfetty.nfc.NfcManager
 import com.example.qonfetty.nfc.NfcPointsManager
 import com.example.qonfetty.nfc.NfcProcessingResult
+import com.example.qonfetty.util.SessionUtils
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,7 +22,8 @@ class DashboardViewModel(
     private val supabaseApi: SupabaseApi,
     private val sessionStorage: SessionStorage,
     private val nfcManager: NfcManager,
-    private val dataRefreshManager: DataRefreshManager? = null
+    private val dataRefreshManager: DataRefreshManager? = null,
+    private val sessionManager: SessionManager? = null
 ) : ViewModel() {
     
     private val nfcPointsManager = NfcPointsManager(supabaseApi, sessionStorage, nfcManager)
@@ -92,6 +95,7 @@ class DashboardViewModel(
                         },
                         onFailure = { exception ->
                             Log.e("DashboardViewModel", "Failed to load recent activity: ${exception.message}", exception)
+                            SessionUtils.handleSessionExpiration(sessionManager, exception.message)
                         }
                     )
                 } else {
@@ -134,47 +138,20 @@ class DashboardViewModel(
     }
     
     /**
-     * Process NFC card scan from dashboard
+     * Process NFC card scan from dashboard (without awarding points yet)
      */
     fun processNfcCard(tag: android.nfc.Tag) {
         viewModelScope.launch {
             _uiState.value = DashboardUiState.Scanning
             
             try {
-                val result = nfcPointsManager.processNfcCard(tag)
+                val result = nfcPointsManager.processNfcCardWithoutAwarding(tag)
                 
                 result.fold(
                     onSuccess = { processingResult ->
                         _lastScanResult.value = processingResult
-                        
-                        // Only add to scan history if it's a success result
-                        if (processingResult is com.example.qonfetty.nfc.NfcProcessingResult.Success) {
-                            // Add to scan history
-                            val newActivity = ScanActivity(
-                                customerName = processingResult.customer.name,
-                                memberId = processingResult.customer.memberId ?: "Unknown",
-                                pointsAdded = processingResult.pointsAwarded,
-                                totalPoints = processingResult.newTotalPoints,
-                                timestamp = System.currentTimeMillis(),
-                                type = ScanType.EXISTING_CUSTOMER // Default to existing since we don't have previous points
-                            )
-                            
-                            val currentHistory = _scanHistory.value.toMutableList()
-                            currentHistory.add(0, newActivity) // Add to beginning
-                            if (currentHistory.size > 10) { // Keep only last 10 scans
-                                currentHistory.removeAt(currentHistory.size - 1)
-                            }
-                            _scanHistory.value = currentHistory
-                        }
-                        
-                        // Trigger immediate refresh of activity data
-                        dataRefreshManager?.triggerRefresh(DataRefreshManager.DataType.ACTIVITY)
-                        
-                        // Also refresh recent activity from database for immediate update
-                        loadRecentActivity()
-                        
-                        _uiState.value = DashboardUiState.ScanSuccess(processingResult)
-                        Log.d("DashboardViewModel", "NFC scan successful: ${if (processingResult is com.example.qonfetty.nfc.NfcProcessingResult.Success) processingResult.customer.name else "Error"}")
+                        _uiState.value = DashboardUiState.ScanConfirmation(processingResult)
+                        Log.d("DashboardViewModel", "NFC scan ready for confirmation: ${if (processingResult is com.example.qonfetty.nfc.NfcProcessingResult.Success) processingResult.customer.name else "Error"}")
                     },
                     onFailure = { exception ->
                         val errorMessage = when {
@@ -189,6 +166,68 @@ class DashboardViewModel(
             } catch (e: Exception) {
                 _uiState.value = DashboardUiState.ScanError(e.message ?: "Unknown error occurred")
                 Log.e("DashboardViewModel", "Error processing NFC card: ${e.message}", e)
+            }
+        }
+    }
+    
+    /**
+     * Confirm and award points after user confirms
+     */
+    fun confirmAndAwardPoints() {
+        viewModelScope.launch {
+            val currentResult = _lastScanResult.value
+            if (currentResult is com.example.qonfetty.nfc.NfcProcessingResult.Success) {
+                _uiState.value = DashboardUiState.Scanning
+                
+                try {
+                    val result = nfcPointsManager.awardPointsToCustomer(currentResult)
+                    
+                    result.fold(
+                        onSuccess = { processingResult ->
+                            if (processingResult is com.example.qonfetty.nfc.NfcProcessingResult.Success) {
+                                // Add to scan history
+                                val newActivity = ScanActivity(
+                                    customerName = processingResult.customer.name,
+                                    memberId = processingResult.customer.memberId ?: "Unknown",
+                                    pointsAdded = processingResult.pointsAwarded,
+                                    totalPoints = processingResult.newTotalPoints,
+                                    timestamp = System.currentTimeMillis(),
+                                    type = ScanType.EXISTING_CUSTOMER
+                                )
+                                
+                                val currentHistory = _scanHistory.value.toMutableList()
+                                currentHistory.add(0, newActivity) // Add to beginning
+                                if (currentHistory.size > 10) { // Keep only last 10 scans
+                                    currentHistory.removeAt(currentHistory.size - 1)
+                                }
+                                _scanHistory.value = currentHistory
+                                
+                                // Trigger immediate refresh of activity data
+                                dataRefreshManager?.triggerRefresh(DataRefreshManager.DataType.ACTIVITY)
+                                
+                                // Also refresh recent activity from database for immediate update
+                                loadRecentActivity()
+                                
+                                _uiState.value = DashboardUiState.ScanSuccess(processingResult)
+                                Log.d("DashboardViewModel", "Points awarded successfully: ${processingResult.customer.name}")
+                            } else {
+                                _uiState.value = DashboardUiState.ScanError("Unexpected result type")
+                            }
+                        },
+                        onFailure = { exception ->
+                            val errorMessage = when {
+                                exception.message?.contains("401") == true -> "Session expired. Please log in again."
+                                exception.message?.contains("403") == true -> "Access denied. Please check your permissions."
+                                else -> exception.message ?: "Failed to award points"
+                            }
+                            _uiState.value = DashboardUiState.ScanError(errorMessage)
+                            Log.e("DashboardViewModel", "Failed to award points: ${exception.message}", exception)
+                        }
+                    )
+                } catch (e: Exception) {
+                    _uiState.value = DashboardUiState.ScanError(e.message ?: "Unknown error occurred")
+                    Log.e("DashboardViewModel", "Error awarding points: ${e.message}", e)
+                }
             }
         }
     }
@@ -224,6 +263,7 @@ class DashboardViewModel(
 sealed class DashboardUiState {
     object Idle : DashboardUiState()
     object Scanning : DashboardUiState()
+    data class ScanConfirmation(val result: NfcProcessingResult) : DashboardUiState()
     data class ScanSuccess(val result: NfcProcessingResult) : DashboardUiState()
     data class ScanError(val message: String) : DashboardUiState()
 }

@@ -21,6 +21,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.qonfetty.config.EnvironmentConfig
 import com.example.qonfetty.data.CustomerWithPoints
 import com.example.qonfetty.data.DataRefreshManager
+import com.example.qonfetty.data.SessionManager
 import com.example.qonfetty.data.SessionStorage
 import com.example.qonfetty.data.SupabaseApi
 import com.example.qonfetty.data.NfcOperationState
@@ -42,6 +43,8 @@ import kotlinx.coroutines.launch
 import com.example.qonfetty.ui.DashboardUiState
 import com.example.qonfetty.ui.RewardsScreen
 import com.example.qonfetty.ui.RewardsViewModel
+import com.example.qonfetty.ui.StoreSettingsScreen
+import com.example.qonfetty.ui.StoreSettingsViewModel
 
 class MainActivity : ComponentActivity() {
     
@@ -65,6 +68,9 @@ class MainActivity : ComponentActivity() {
     // Global NFC write callback
     private var globalNfcWriteCallback: ((android.nfc.Tag) -> Unit)? = null
     
+    // Global SessionManager for handling session expiration
+    private var globalSessionManager: SessionManager? = null
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
@@ -86,6 +92,7 @@ class MainActivity : ComponentActivity() {
                     var showNfcScanResult by remember { mutableStateOf(false) }
                     var showNfcTest by remember { mutableStateOf(false) }
                     var showRewards by remember { mutableStateOf(false) }
+                    var showSettings by remember { mutableStateOf(false) }
                     var inactivityMessage by remember { mutableStateOf<String?>(null) }
                     
                     // Initialize environment configuration
@@ -98,24 +105,38 @@ class MainActivity : ComponentActivity() {
                         val api = SupabaseApi(environmentConfig)
                         supabaseApi = api
                         
+                        // Initialize SessionManager for global session monitoring
+                        globalSessionManager = SessionManager(sessionStorage, api)
+                        
                         // Initialize DataRefreshManager
                         globalDataRefreshManager = DataRefreshManager(api, sessionStorage)
                         
                         // Initialize global ViewModels for NFC handling
                         globalNfcPointsViewModel = NfcPointsViewModel(api, sessionStorage, nfcManager!!)
-                        globalDashboardViewModel = DashboardViewModel(api, sessionStorage, nfcManager!!, globalDataRefreshManager)
+                        globalDashboardViewModel = DashboardViewModel(api, sessionStorage, nfcManager!!, globalDataRefreshManager, globalSessionManager)
                     }
                     
-                    if (supabaseApi != null) {
+                    if (supabaseApi != null && globalSessionManager != null) {
                         val viewModel: AuthViewModel = viewModel {
                             AuthViewModel(supabaseApi!!, sessionStorage)
                         }
                         
                         val isLoggedIn by viewModel.isLoggedIn.collectAsStateWithLifecycle()
+                        val sessionExpired by globalSessionManager!!.sessionExpired.collectAsStateWithLifecycle()
+                        
+                        // Handle session expiration globally
+                        LaunchedEffect(sessionExpired) {
+                            if (sessionExpired) {
+                                Log.d("MainActivity", "Session expired detected, logging out user")
+                                viewModel.logout()
+                                globalSessionManager?.resetSessionExpired()
+                            }
+                        }
                         
                         // Update global authentication state and manage data refresh
                         LaunchedEffect(isLoggedIn) {
                             globalIsLoggedIn = isLoggedIn
+                            globalSessionManager?.updateLoginState(isLoggedIn)
                             
                             // Start/stop data refresh based on login status
                             if (isLoggedIn) {
@@ -185,7 +206,9 @@ class MainActivity : ComponentActivity() {
                                 
                                 // Set up NFC test callback
                                 LaunchedEffect(showNfcTest) {
+                                    Log.d("MainActivity", "LaunchedEffect showNfcTest changed to: $showNfcTest")
                                     if (showNfcTest) {
+                                        Log.d("MainActivity", "Setting up NFC test callback")
                                         globalNfcTestCallback = { tag ->
                                             // This will be called when NFC tag is discovered
                                             android.util.Log.d("MainActivity", "NFC test callback triggered")
@@ -236,6 +259,7 @@ class MainActivity : ComponentActivity() {
                                             }
                                         }
                                     } else {
+                                        Log.d("MainActivity", "Clearing NFC test callback")
                                         globalNfcTestCallback = null
                                     }
                                 }
@@ -252,12 +276,22 @@ class MainActivity : ComponentActivity() {
                             }
                             showRewards -> {
                                 val rewardsViewModel: RewardsViewModel = viewModel {
-                                    RewardsViewModel(supabaseApi!!, sessionStorage, globalDataRefreshManager)
+                                    RewardsViewModel(supabaseApi!!, sessionStorage, globalDataRefreshManager, globalSessionManager)
                                 }
                                 
                                 RewardsScreen(
                                     viewModel = rewardsViewModel,
                                     onBack = { showRewards = false }
+                                )
+                            }
+                            showSettings -> {
+                                val storeSettingsViewModel: StoreSettingsViewModel = viewModel {
+                                    StoreSettingsViewModel(supabaseApi!!, sessionStorage, globalSessionManager)
+                                }
+                                
+                                StoreSettingsScreen(
+                                    viewModel = storeSettingsViewModel,
+                                    onBack = { showSettings = false }
                                 )
                             }
                             selectedCustomer != null -> {
@@ -287,7 +321,7 @@ class MainActivity : ComponentActivity() {
                             }
                             showCustomers -> {
                                 val customerViewModel: CustomerViewModel = viewModel {
-                                    CustomerViewModel(supabaseApi!!, sessionStorage, globalDataRefreshManager)
+                                    CustomerViewModel(supabaseApi!!, sessionStorage, globalDataRefreshManager, globalSessionManager)
                                 }
                                 
                                 // Check if we need to redirect to login due to auth error
@@ -328,7 +362,8 @@ class MainActivity : ComponentActivity() {
                                         dashboardViewModel = dashboardViewModel,
                                         onShowCustomers = { showCustomers = true },
                                         onShowNfcTest = { showNfcTest = true },
-                                        onShowRewards = { showRewards = true }
+                                        onShowRewards = { showRewards = true },
+                                        onShowSettings = { showSettings = true }
                                     )
                                 }
                             }
@@ -400,6 +435,12 @@ class MainActivity : ComponentActivity() {
                     android.util.Log.d("MainActivity", "Calling NFC test callback")
                     globalNfcTestCallback?.invoke(nfcTag)
                 } else {
+                    // Clear any lingering test callback if we're not in test mode
+                    if (globalNfcTestCallback != null) {
+                        android.util.Log.d("MainActivity", "Clearing lingering NFC test callback")
+                        globalNfcTestCallback = null
+                    }
+                    
                     android.util.Log.d("MainActivity", "Processing NFC tag for dashboard")
                     // Process NFC tag with the dashboard ViewModel for automatic handling
                     if (globalDashboardViewModel != null) {

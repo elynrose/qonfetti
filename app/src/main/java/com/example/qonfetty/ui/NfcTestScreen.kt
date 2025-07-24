@@ -19,6 +19,7 @@ import com.example.qonfetty.data.SessionStorage
 import com.example.qonfetty.nfc.NfcManager
 import com.example.qonfetty.nfc.NfcPointsManager
 import com.example.qonfetty.nfc.NfcWriteManager
+import com.example.qonfetty.ui.theme.StatusBarSpacer
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
@@ -48,7 +49,7 @@ fun NfcTestScreen(
         modifier = modifier.fillMaxSize()
     ) {
         // Add top spacing to avoid status bar
-        Spacer(modifier = Modifier.height(48.dp))
+        StatusBarSpacer()
         
         // Content with proper padding and pull to refresh
         Box(

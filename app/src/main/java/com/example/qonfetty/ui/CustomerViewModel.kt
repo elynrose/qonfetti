@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.qonfetty.data.*
 import com.example.qonfetty.data.DataRefreshManager
+import com.example.qonfetty.data.SessionManager
+import com.example.qonfetty.util.SessionUtils
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,7 +28,8 @@ sealed class CustomerOperationState {
 class CustomerViewModel(
     private val supabaseApi: SupabaseApi,
     private val sessionStorage: SessionStorage,
-    private val dataRefreshManager: DataRefreshManager? = null
+    private val dataRefreshManager: DataRefreshManager? = null,
+    private val sessionManager: SessionManager? = null
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow<CustomerUiState>(CustomerUiState.Loading)
@@ -89,15 +92,9 @@ class CustomerViewModel(
                         Log.d("CustomerViewModel", "Loaded ${customers.size} customers")
                     },
                     onFailure = { exception ->
-                        // Check if it's an authentication error
-                        if (exception.message?.contains("401") == true || 
-                            exception.message?.contains("Unauthorized") == true) {
-                            Log.w("CustomerViewModel", "Authentication failed, clearing session")
-                            sessionStorage.clearSession()
-                            _uiState.value = CustomerUiState.Error("Session expired. Please login again.")
-                        } else {
-                            _uiState.value = CustomerUiState.Error(exception.message ?: "Failed to load customers")
-                        }
+                        Log.e("CustomerViewModel", "Failed to load customers: ${exception.message}", exception)
+                        SessionUtils.handleSessionExpiration(sessionManager, exception.message)
+                        _uiState.value = CustomerUiState.Error(exception.message ?: "Failed to load customers")
                         Log.e("CustomerViewModel", "Failed to load customers: ${exception.message}", exception)
                     }
                 )

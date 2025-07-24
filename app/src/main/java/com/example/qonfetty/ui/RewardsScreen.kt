@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,8 +36,12 @@ import coil.compose.AsyncImage
 import android.util.Log
 import coil.request.ImageRequest
 import com.example.qonfetty.data.Reward
+import com.example.qonfetty.data.Category
 import com.example.qonfetty.ui.components.LiveDataIndicator
+import com.example.qonfetty.ui.theme.StatusBarSpacer
 import java.util.UUID
+
+// Categories will be loaded from database
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
@@ -49,6 +54,7 @@ fun RewardsScreen(
     val operationState by viewModel.operationState.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val selectedCategory by viewModel.selectedCategory.collectAsStateWithLifecycle()
+    val categories by viewModel.categories.collectAsStateWithLifecycle()
     
     var showAddDialog by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf<Reward?>(null) }
@@ -81,7 +87,7 @@ fun RewardsScreen(
         modifier = modifier.fillMaxSize()
     ) {
         // Add top spacing to avoid status bar
-        Spacer(modifier = Modifier.height(48.dp))
+        StatusBarSpacer()
         
         // Content with proper padding and pull to refresh
         Box(
@@ -120,14 +126,9 @@ fun RewardsScreen(
                 }
                 
                 // Live data indicator
-                val currentOperationState = operationState
+                val refreshState by viewModel.refreshState.collectAsStateWithLifecycle()
                 LiveDataIndicator(
-                    refreshState = when (currentOperationState) {
-                        is RewardsOperationState.Idle -> com.example.qonfetty.data.DataRefreshManager.RefreshState.Idle
-                        is RewardsOperationState.Loading -> com.example.qonfetty.data.DataRefreshManager.RefreshState.Refreshing
-                        is RewardsOperationState.Success -> com.example.qonfetty.data.DataRefreshManager.RefreshState.Success(currentOperationState.message)
-                        is RewardsOperationState.Error -> com.example.qonfetty.data.DataRefreshManager.RefreshState.Error(currentOperationState.message)
-                    },
+                    refreshState = refreshState,
                     modifier = Modifier.align(Alignment.End)
                 )
                 
@@ -261,6 +262,7 @@ fun RewardsScreen(
     if (showAddDialog) {
         RewardDialog(
             reward = null,
+            categories = categories,
             selectedImageBytes = selectedImageBytes,
             selectedImageFileName = selectedImageFileName,
             onDismiss = { 
@@ -292,6 +294,7 @@ fun RewardsScreen(
     showEditDialog?.let { reward ->
         RewardDialog(
             reward = reward,
+            categories = categories,
             onDismiss = { showEditDialog = null },
             onSave = { name, description, pointsRequired, photo, price, quantity, category, isShared ->
                 val updatedReward = reward.copy(
@@ -377,7 +380,10 @@ private fun RewardCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onEdit() },
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White
+        )
     ) {
         Row(
             modifier = Modifier
@@ -509,6 +515,7 @@ private fun RewardCard(
 @Composable
 private fun RewardDialog(
     reward: Reward?,
+    categories: List<Category>,
     selectedImageBytes: ByteArray? = null,
     selectedImageFileName: String? = null,
     onDismiss: () -> Unit,
@@ -570,12 +577,54 @@ private fun RewardDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
                 
-                OutlinedTextField(
-                    value = category,
-                    onValueChange = { category = it },
-                    label = { Text("Category") },
+                // Category selection using Button and AlertDialog
+                var showCategoryDialog by remember { mutableStateOf(false) }
+                
+                // Display current category
+                Text(
+                    text = "Category: ${if (category.isEmpty()) "None selected" else category}",
+                    style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.fillMaxWidth()
                 )
+                
+                // Category selection button
+                Button(
+                    onClick = { showCategoryDialog = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Select Category")
+                }
+                
+                if (showCategoryDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showCategoryDialog = false },
+                        title = { Text("Select Category") },
+                        text = {
+                            LazyColumn {
+                                items(categories) { categoryOption ->
+                                    TextButton(
+                                        onClick = {
+                                            category = categoryOption.name
+                                            showCategoryDialog = false
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            text = categoryOption.name,
+                                            modifier = Modifier.fillMaxWidth(),
+                                            textAlign = TextAlign.Start
+                                        )
+                                    }
+                                }
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = { showCategoryDialog = false }) {
+                                Text("Cancel")
+                            }
+                        }
+                    )
+                }
                 
                 // Image upload section
                 Row(

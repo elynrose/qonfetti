@@ -11,7 +11,10 @@ import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import java.util.Date
+import com.example.qonfetty.data.Category
 
 class SupabaseApi(private val environmentConfig: EnvironmentConfig) {
     
@@ -127,6 +130,31 @@ class SupabaseApi(private val environmentConfig: EnvironmentConfig) {
                 Result.failure(Exception(error.msg))
             }
         } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Validate if the current auth token is still valid
+     */
+    suspend fun validateToken(authToken: String): Result<Boolean> {
+        return try {
+            // Try to make a simple API call to validate the token
+            val response = client.get("$baseUrl/auth/v1/user") {
+                headers {
+                    append("apikey", anonKey)
+                    append("Authorization", "Bearer $authToken")
+                }
+            }
+            
+            if (response.status.isSuccess()) {
+                Result.success(true)
+            } else {
+                Log.d("SupabaseApi", "Token validation failed with status: ${response.status}")
+                Result.failure(Exception("Token validation failed"))
+            }
+        } catch (e: Exception) {
+            Log.e("SupabaseApi", "Error validating token: ${e.message}", e)
             Result.failure(e)
         }
     }
@@ -974,7 +1002,7 @@ class SupabaseApi(private val environmentConfig: EnvironmentConfig) {
                 }
                 parameter("store_id", "eq.$storeId")
                 parameter("order", "created_at.desc")
-                parameter("limit", "100")
+                parameter("limit", "10")
             }
             
             if (!transactionsResponse.status.isSuccess()) {
@@ -1392,6 +1420,291 @@ class SupabaseApi(private val environmentConfig: EnvironmentConfig) {
         } catch (e: Exception) {
             Log.e("SupabaseApi", "Error getting current store ID: ${e.message}", e)
             null
+        }
+    }
+    
+    // ==================== STORE SETTINGS API METHODS ====================
+    
+    /**
+     * Get store settings for a store
+     */
+    suspend fun getStoreSettings(storeId: String, authToken: String): Result<StoreSettings?> {
+        return try {
+            Log.d("SupabaseApi", "Getting store settings for store: $storeId")
+            
+            val response = client.get("$baseUrl/rest/v1/store_settings?store_id=eq.$storeId") {
+                headers {
+                    append("apikey", anonKey)
+                    append("Authorization", "Bearer $authToken")
+                }
+            }
+            
+            if (response.status.isSuccess()) {
+                val settings = response.body<List<StoreSettings>>()
+                val storeSettings = settings.firstOrNull()
+                Log.d("SupabaseApi", "Store settings retrieved: ${storeSettings != null}")
+                Result.success(storeSettings)
+            } else {
+                Log.e("SupabaseApi", "Failed to get store settings: ${response.status}")
+                Result.failure(Exception("Failed to get store settings: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            Log.e("SupabaseApi", "Error getting store settings: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Create store settings
+     */
+    suspend fun createStoreSettings(request: Map<String, Any>, storeId: String, authToken: String): Result<StoreSettings> {
+        return try {
+            Log.d("SupabaseApi", "Creating store settings for store: $storeId")
+            
+            val settingsData = request.toMutableMap().apply {
+                put("id", java.util.UUID.randomUUID().toString())
+            }
+            
+            // Convert Map to JSON string manually to avoid serialization issues
+            val jsonString = buildJsonObject {
+                settingsData.forEach { (key, value) ->
+                    when (value) {
+                        is String -> {
+                            // Encrypt sensitive API keys before sending
+                            val finalValue = when (key) {
+                                "openai_api_key", "google_maps_api_key" -> {
+                                    if (value.isNotEmpty()) {
+                                        // For now, we'll send as-is, but you could implement encryption here
+                                        // encryptApiKey(value)
+                                        value
+                                    } else {
+                                        value
+                                    }
+                                }
+                                else -> value
+                            }
+                            put(key, finalValue)
+                        }
+                        is Int -> put(key, value)
+                        is Boolean -> put(key, value)
+                        is Double -> put(key, value)
+                        is Float -> put(key, value)
+                        is Long -> put(key, value)
+                        null -> put(key, "") // Use empty string instead of null
+                        else -> put(key, value.toString())
+                    }
+                }
+            }.toString()
+            
+            val response = client.post("$baseUrl/rest/v1/store_settings") {
+                contentType(ContentType.Application.Json)
+                headers {
+                    append("apikey", anonKey)
+                    append("Authorization", "Bearer $authToken")
+                    append("Prefer", "return=representation")
+                }
+                setBody(jsonString)
+            }
+            
+            if (response.status.isSuccess()) {
+                val createdSettings = response.body<List<StoreSettings>>().firstOrNull()
+                if (createdSettings != null) {
+                    Log.d("SupabaseApi", "Store settings created successfully")
+                    Result.success(createdSettings)
+                } else {
+                    Log.e("SupabaseApi", "No settings returned after creation")
+                    Result.failure(Exception("No settings returned after creation"))
+                }
+            } else {
+                Log.e("SupabaseApi", "Failed to create store settings: ${response.status}")
+                Result.failure(Exception("Failed to create store settings: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            Log.e("SupabaseApi", "Error creating store settings: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Update store settings
+     */
+    suspend fun updateStoreSettings(request: StoreSettingsUpdateRequest, authToken: String): Result<StoreSettings> {
+        return try {
+            Log.d("SupabaseApi", "Updating store settings: ${request.id}")
+            
+            val settingsData = mapOf(
+                "store_name" to request.storeName,
+                "category" to request.category,
+                "email" to request.email,
+                "phone" to request.phone,
+                "website" to request.website,
+                "store_logo" to request.storeLogo,
+                "points_per_purchase" to request.pointsPerPurchase,
+                "promotional_enabled" to request.promotionalEnabled,
+                "promotion_points_per_purchase" to request.promotionPointsPerPurchase,
+                "openai_api_key" to request.openaiApiKey,
+                "google_maps_api_key" to request.googleMapsApiKey
+            )
+            
+            // Convert Map to JSON string manually to avoid serialization issues
+            val jsonString = buildJsonObject {
+                settingsData.forEach { (key, value) ->
+                    when (value) {
+                        is String -> {
+                            // Encrypt sensitive API keys before sending
+                            val finalValue = when (key) {
+                                "openai_api_key", "google_maps_api_key" -> {
+                                    if (value.isNotEmpty()) {
+                                        // For now, we'll send as-is, but you could implement encryption here
+                                        // encryptApiKey(value)
+                                        value
+                                    } else {
+                                        value
+                                    }
+                                }
+                                else -> value
+                            }
+                            put(key, finalValue)
+                        }
+                        is Int -> put(key, value)
+                        is Boolean -> put(key, value)
+                        is Double -> put(key, value)
+                        is Float -> put(key, value)
+                        is Long -> put(key, value)
+                        null -> put(key, "") // Use empty string instead of null
+                        else -> put(key, value.toString())
+                    }
+                }
+            }.toString()
+            
+            val response = client.patch("$baseUrl/rest/v1/store_settings?id=eq.${request.id}") {
+                contentType(ContentType.Application.Json)
+                headers {
+                    append("apikey", anonKey)
+                    append("Authorization", "Bearer $authToken")
+                    append("Prefer", "return=representation")
+                }
+                setBody(jsonString)
+            }
+            
+            if (response.status.isSuccess()) {
+                try {
+                    val updatedSettings = response.body<List<StoreSettings>>().firstOrNull()
+                    if (updatedSettings != null) {
+                        Log.d("SupabaseApi", "Store settings updated successfully")
+                        Result.success(updatedSettings)
+                    } else {
+                        Log.d("SupabaseApi", "Store settings updated successfully (no response body)")
+                        // Create a dummy settings object since we know it was updated
+                        val dummySettings = StoreSettings(
+                            id = request.id,
+                            storeName = request.storeName,
+                            category = request.category,
+                            email = request.email,
+                            phone = request.phone,
+                            website = request.website,
+                            storeLogo = request.storeLogo,
+                            pointsPerPurchase = request.pointsPerPurchase,
+                            promotionalEnabled = request.promotionalEnabled,
+                            promotionPointsPerPurchase = request.promotionPointsPerPurchase,
+                            openaiApiKey = request.openaiApiKey,
+                            googleMapsApiKey = request.googleMapsApiKey,
+                            storeId = ""
+                        )
+                        Result.success(dummySettings)
+                    }
+                } catch (e: Exception) {
+                    // Supabase sometimes returns empty response or no content type
+                    // If the status is success, the settings were updated
+                    Log.d("SupabaseApi", "Store settings updated successfully (no response body)")
+                    val dummySettings = StoreSettings(
+                        id = request.id,
+                        storeName = request.storeName,
+                        category = request.category,
+                        email = request.email,
+                        phone = request.phone,
+                        website = request.website,
+                        storeLogo = request.storeLogo,
+                        pointsPerPurchase = request.pointsPerPurchase,
+                        promotionalEnabled = request.promotionalEnabled,
+                        promotionPointsPerPurchase = request.promotionPointsPerPurchase,
+                        openaiApiKey = request.openaiApiKey,
+                        googleMapsApiKey = request.googleMapsApiKey,
+                        storeId = ""
+                    )
+                    Result.success(dummySettings)
+                }
+            } else {
+                Log.e("SupabaseApi", "Failed to update store settings: ${response.status}")
+                Result.failure(Exception("Failed to update store settings: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            Log.e("SupabaseApi", "Error updating store settings: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Upload store logo
+     */
+    suspend fun uploadStoreLogo(imageBytes: ByteArray, fileName: String, authToken: String): Result<String> {
+        return try {
+            Log.d("SupabaseApi", "Uploading store logo: $fileName")
+            
+            val response = client.post("$baseUrl/storage/v1/object/photos/$fileName") {
+                headers {
+                    append("apikey", anonKey)
+                    append("Authorization", "Bearer $authToken")
+                    append("Content-Type", "image/jpeg")
+                }
+                setBody(imageBytes)
+            }
+            
+            if (response.status.isSuccess()) {
+                val imageUrl = "$baseUrl/storage/v1/object/public/photos/$fileName"
+                Log.d("SupabaseApi", "Store logo uploaded successfully: $imageUrl")
+                Result.success(imageUrl)
+            } else {
+                Log.e("SupabaseApi", "Failed to upload store logo: ${response.status}")
+                Result.failure(Exception("Failed to upload store logo: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            Log.e("SupabaseApi", "Error uploading store logo: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Get all active categories
+     */
+    suspend fun getCategories(authToken: String): Result<List<Category>> {
+        return try {
+            Log.d("SupabaseApi", "Fetching categories from $baseUrl/rest/v1/categories")
+            
+            val response = client.get("$baseUrl/rest/v1/categories") {
+                headers {
+                    append("apikey", anonKey)
+                    append("Authorization", "Bearer $authToken")
+                }
+                parameter("select", "*")
+                parameter("is_active", "eq.true")
+                parameter("order", "name.asc")
+            }
+            
+            Log.d("SupabaseApi", "Categories response status: ${response.status}")
+            
+            if (response.status.isSuccess()) {
+                val categories = response.body<List<Category>>()
+                Log.d("SupabaseApi", "Fetched ${categories.size} categories: ${categories.map { it.name }}")
+                Result.success(categories)
+            } else {
+                val errorBody = response.body<String>()
+                Log.e("SupabaseApi", "Failed to fetch categories: ${response.status}, body: $errorBody")
+                Result.failure(Exception("Failed to fetch categories: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            Log.e("SupabaseApi", "Error fetching categories: ${e.message}", e)
+            Result.failure(e)
         }
     }
 } 

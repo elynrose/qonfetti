@@ -21,6 +21,18 @@ class NfcPointsManager(
      * Process NFC card and award points to customer
      */
     suspend fun processNfcCard(tag: Tag): Result<NfcProcessingResult> {
+        val result = processNfcCardWithoutAwarding(tag)
+        return if (result.isSuccess && result.getOrNull() is NfcProcessingResult.Success) {
+            awardPointsToCustomer(result.getOrNull() as NfcProcessingResult.Success)
+        } else {
+            result
+        }
+    }
+    
+    /**
+     * Process NFC card without awarding points (for confirmation step)
+     */
+    suspend fun processNfcCardWithoutAwarding(tag: Tag): Result<NfcProcessingResult> {
         return try {
             Log.d("NfcPointsManager", "Processing NFC card")
             
@@ -52,63 +64,97 @@ class NfcPointsManager(
             
             Log.d("NfcPointsManager", "Found NFC card: ${nfcCard.cardId}")
             
-            // Award points to customer
+            // Get current points for the customer (without awarding new points)
             val authToken = sessionStorage.getAuthToken()
             if (authToken == null) {
                 Log.e("NfcPointsManager", "Not authenticated")
                 return Result.failure(Exception("Not authenticated. Please login again."))
             }
             
-            Log.d("NfcPointsManager", "Awarding 1 points to customer: ${customer.id} with NFC card: ${nfcCard.cardId}")
+            // Get current customer points
+            val currentPointsResult = supabaseApi.getCustomerPoints(customer.id!!, sessionStorage.getStoreId() ?: "", authToken)
+            val currentPoints = currentPointsResult.getOrNull()?.points ?: 0
+            
+            Log.d("NfcPointsManager", "Current points for customer ${customer.name}: $currentPoints")
+            
+            // Get claimable rewards for current points + 1 (what they would have after award)
+            val storeId = sessionStorage.getStoreId()
+            val rewards = if (!storeId.isNullOrEmpty()) {
+                val rewardsResult = supabaseApi.getClaimableRewards(
+                    storeId = storeId,
+                    currentPoints = currentPoints + 1, // Points they would have after award
+                    authToken = authToken
+                )
+                rewardsResult.getOrNull() ?: emptyList()
+            } else {
+                emptyList()
+            }
+            
+            // Create a preview result (points not actually awarded yet)
+            val processingResult = NfcProcessingResult.Success(
+                customer = customer,
+                pointsAwarded = 1,
+                newTotalPoints = currentPoints + 1, // What they would have after award
+                claimableRewards = rewards,
+                nfcCardId = nfcCard.cardId
+            )
+            
+            Result.success(processingResult)
+        } catch (e: Exception) {
+            Log.e("NfcPointsManager", "Error processing NFC card", e)
+            Result.failure(Exception("Error processing NFC card: ${e.message}"))
+        }
+    }
+    
+    /**
+     * Award points to customer (called after user confirms)
+     */
+    suspend fun awardPointsToCustomer(processingResult: NfcProcessingResult.Success): Result<NfcProcessingResult> {
+        return try {
+            Log.d("NfcPointsManager", "Awarding points to customer: ${processingResult.customer.name}")
+            
+            val authToken = sessionStorage.getAuthToken()
+            if (authToken == null) {
+                Log.e("NfcPointsManager", "Not authenticated")
+                return Result.failure(Exception("Not authenticated. Please login again."))
+            }
             
             val result = supabaseApi.awardPointsToCustomer(
-                customerId = customer.id!!,
-                points = 1,
-                nfcCardId = nfcCard.cardId,
+                customerId = processingResult.customer.id!!,
+                points = processingResult.pointsAwarded,
+                nfcCardId = processingResult.nfcCardId,
                 authToken = authToken
             )
             
             result.fold(
                 onSuccess = { customerPoints ->
-                    Log.d("NfcPointsManager", "Successfully awarded 1 points to customer: ${customer.id}")
+                    Log.d("NfcPointsManager", "Successfully awarded ${processingResult.pointsAwarded} points to customer: ${processingResult.customer.id}")
                     
                     // Extract the new points value from the CustomerPoints object
                     val newPoints = customerPoints.points
                     
-                    // Calculate previous points (newPoints - pointsAwarded)
-                    val previousPoints = newPoints - 1
-                    
-                    // Get claimable rewards
+                    // Get claimable rewards for the new total points
                     val storeId = sessionStorage.getStoreId()
-                    if (storeId.isNullOrEmpty()) {
-                        Log.e("NfcPointsManager", "Store ID is null or empty, skipping rewards")
-                        val processingResult = NfcProcessingResult.Success(
-                            customer = customer,
-                            pointsAwarded = 1,
-                            newTotalPoints = newPoints,
-                            claimableRewards = emptyList(),
-                            nfcCardId = nfcCard.cardId
+                    val rewards = if (!storeId.isNullOrEmpty()) {
+                        val rewardsResult = supabaseApi.getClaimableRewards(
+                            storeId = storeId,
+                            currentPoints = newPoints,
+                            authToken = authToken
                         )
-                        return Result.success(processingResult)
+                        rewardsResult.getOrNull() ?: emptyList()
+                    } else {
+                        emptyList()
                     }
                     
-                    val rewardsResult = supabaseApi.getClaimableRewards(
-                        storeId = storeId,
-                        currentPoints = newPoints,
-                        authToken = authToken
-                    )
-                    
-                    val rewards = rewardsResult.getOrNull() ?: emptyList()
-                    
-                    val processingResult = NfcProcessingResult.Success(
-                        customer = customer,
-                        pointsAwarded = 1,
+                    val finalResult = NfcProcessingResult.Success(
+                        customer = processingResult.customer,
+                        pointsAwarded = processingResult.pointsAwarded,
                         newTotalPoints = newPoints,
                         claimableRewards = rewards,
-                        nfcCardId = nfcCard.cardId
+                        nfcCardId = processingResult.nfcCardId
                     )
                     
-                    Result.success(processingResult)
+                    Result.success(finalResult)
                 },
                 onFailure = { exception ->
                     Log.e("NfcPointsManager", "Failed to award points: ${exception.message}", exception)
@@ -116,10 +162,10 @@ class NfcPointsManager(
                     // Handle specific authorization error
                     val errorMessage = when {
                         exception.message?.contains("not authorized") == true -> {
-                            "Customer is not authorized for this store. Please add ${customer.name} to your customer list first."
+                            "Customer is not authorized for this store. Please add ${processingResult.customer.name} to your customer list first."
                         }
                         exception.message?.contains("404") == true -> {
-                            "Customer not found or not associated with this store. Please add ${customer.name} to your customer list first."
+                            "Customer not found or not associated with this store. Please add ${processingResult.customer.name} to your customer list first."
                         }
                         else -> {
                             "Failed to award points: ${exception.message}"
@@ -130,8 +176,8 @@ class NfcPointsManager(
                 }
             )
         } catch (e: Exception) {
-            Log.e("NfcPointsManager", "Error processing NFC card", e)
-            Result.failure(Exception("Error processing NFC card: ${e.message}"))
+            Log.e("NfcPointsManager", "Error awarding points", e)
+            Result.failure(Exception("Error awarding points: ${e.message}"))
         }
     }
     

@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.qonfetty.data.CustomerWithPoints
 import com.example.qonfetty.ui.components.LiveDataIndicator
+import com.example.qonfetty.ui.theme.StatusBarSpacer
 import androidx.compose.foundation.clickable
 
 @OptIn(ExperimentalMaterialApi::class)
@@ -66,7 +67,7 @@ fun CustomerListScreen(
         modifier = modifier.fillMaxSize()
     ) {
         // Add top spacing to avoid status bar
-        Spacer(modifier = Modifier.height(48.dp))
+        StatusBarSpacer()
         
         // Content with proper padding and pull to refresh
         Box(
