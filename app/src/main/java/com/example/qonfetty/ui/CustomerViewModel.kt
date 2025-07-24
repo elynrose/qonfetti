@@ -3,6 +3,7 @@ package com.example.qonfetty.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.qonfetty.data.*
+import com.example.qonfetty.data.DataRefreshManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,7 +25,8 @@ sealed class CustomerOperationState {
 
 class CustomerViewModel(
     private val supabaseApi: SupabaseApi,
-    private val sessionStorage: SessionStorage
+    private val sessionStorage: SessionStorage,
+    private val dataRefreshManager: DataRefreshManager? = null
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow<CustomerUiState>(CustomerUiState.Loading)
@@ -39,8 +41,31 @@ class CustomerViewModel(
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
     
+    private val _refreshState = MutableStateFlow<DataRefreshManager.RefreshState>(DataRefreshManager.RefreshState.Idle)
+    val refreshState: StateFlow<DataRefreshManager.RefreshState> = _refreshState.asStateFlow()
+    
     init {
         loadCustomers()
+        
+        // Observe live data from DataRefreshManager if available
+        dataRefreshManager?.let { manager ->
+            viewModelScope.launch {
+                manager.customersData.collect { customers ->
+                    if (customers.isNotEmpty()) {
+                        _customers.value = customers
+                        _uiState.value = CustomerUiState.Success(customers)
+                        Log.d("CustomerViewModel", "Received live update: ${customers.size} customers")
+                    }
+                }
+            }
+            
+            // Observe refresh state
+            viewModelScope.launch {
+                manager.refreshState.collect { state ->
+                    _refreshState.value = state
+                }
+            }
+        }
     }
     
     fun loadCustomers() {
@@ -84,6 +109,7 @@ class CustomerViewModel(
     }
     
     fun createCustomer(name: String, email: String, phone: String, address: String? = null) {
+        Log.d("CustomerViewModel", "createCustomer called with name: $name, email: $email, phone: $phone")
         viewModelScope.launch {
             _operationState.value = CustomerOperationState.Loading
             
@@ -91,6 +117,7 @@ class CustomerViewModel(
                 val authToken = sessionStorage.getAuthToken()
                 
                 if (authToken == null) {
+                    Log.e("CustomerViewModel", "Not authenticated")
                     _operationState.value = CustomerOperationState.Error("Not authenticated")
                     return@launch
                 }

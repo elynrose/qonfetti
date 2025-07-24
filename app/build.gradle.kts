@@ -66,6 +66,9 @@ dependencies {
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
     
+    // Coil for image loading
+    implementation("io.coil-kt:coil-compose:2.5.0")
+    
     // Security for session storage
     implementation(libs.androidx.security.crypto)
     

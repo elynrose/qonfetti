@@ -35,6 +35,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.qonfetty.data.CustomerWithPoints
+import com.example.qonfetty.ui.components.LiveDataIndicator
 import androidx.compose.foundation.clickable
 
 @OptIn(ExperimentalMaterialApi::class)
@@ -48,6 +49,7 @@ fun CustomerListScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val operationState by viewModel.operationState.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val refreshState by viewModel.refreshState.collectAsStateWithLifecycle()
     
     var showAddDialog by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf<CustomerWithPoints?>(null) }
@@ -98,6 +100,12 @@ fun CustomerListScreen(
                         Icon(Icons.Default.Add, contentDescription = "Add Customer")
                     }
                 }
+                
+                // Live data indicator
+                LiveDataIndicator(
+                    refreshState = refreshState,
+                    modifier = Modifier.align(Alignment.End)
+                )
                 
                 // Search bar positioned lower
                 OutlinedTextField(

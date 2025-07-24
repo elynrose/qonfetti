@@ -30,6 +30,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.qonfetty.data.PointsTransaction
 import com.example.qonfetty.data.PointsTransactionWithCustomer
 import com.example.qonfetty.nfc.NfcProcessingResult
+import com.example.qonfetty.ui.components.LiveDataIndicator
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -40,6 +41,7 @@ fun DashboardScreen(
     dashboardViewModel: DashboardViewModel,
     onShowCustomers: () -> Unit = {},
     onShowNfcTest: () -> Unit = {},
+    onShowRewards: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -47,6 +49,7 @@ fun DashboardScreen(
     val scanHistory by dashboardViewModel.scanHistory.collectAsStateWithLifecycle()
     val recentActivity by dashboardViewModel.recentActivity.collectAsStateWithLifecycle()
     val lastScanResult by dashboardViewModel.lastScanResult.collectAsStateWithLifecycle()
+    val refreshState by dashboardViewModel.refreshState.collectAsStateWithLifecycle()
     
     // Pull to refresh state
     val isRefreshing = dashboardState is DashboardUiState.Scanning
@@ -67,6 +70,12 @@ fun DashboardScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
+            // Live data indicator
+            LiveDataIndicator(
+                refreshState = refreshState,
+                modifier = Modifier.align(Alignment.End)
+            )
+            
             // Header with NFC status
             DashboardHeader(
                 dashboardState = dashboardState,
@@ -99,6 +108,7 @@ fun DashboardScreen(
             ActionButtonsCard(
                 onShowCustomers = onShowCustomers,
                 onShowNfcTest = onShowNfcTest,
+                onShowRewards = onShowRewards,
                 onLogout = { viewModel.logout() }
             )
             
@@ -473,6 +483,7 @@ private fun StoreInfoCard(uiState: com.example.qonfetty.ui.AuthUiState) {
 private fun ActionButtonsCard(
     onShowCustomers: () -> Unit,
     onShowNfcTest: () -> Unit,
+    onShowRewards: () -> Unit = {},
     onLogout: () -> Unit
 ) {
     Card(
@@ -518,6 +529,19 @@ private fun ActionButtonsCard(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Write to Card")
+                }
+                
+                Button(
+                    onClick = onShowRewards,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Star,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Manage Rewards")
                 }
                 
                 OutlinedButton(
@@ -629,8 +653,18 @@ private fun ActivityItem(activity: PointsTransactionWithCustomer) {
         activity.createdAt?.let { 
             try {
                 // Parse ISO 8601 timestamp
-                val instant = java.time.Instant.parse(it)
-                val date = Date.from(instant)
+                // Simple date parsing that works on older API levels
+                val date = try {
+                    val formatter = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'", java.util.Locale.getDefault())
+                    formatter.parse(it) ?: Date()
+                } catch (e: Exception) {
+                    try {
+                        val formatter = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.getDefault())
+                        formatter.parse(it) ?: Date()
+                    } catch (e2: Exception) {
+                        Date() // Fallback to current date
+                    }
+                }
                 dateFormat.format(date)
             } catch (e: Exception) {
                 "Recent"

@@ -11,6 +11,7 @@ import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import java.util.Date
 
 class SupabaseApi(private val environmentConfig: EnvironmentConfig) {
     
@@ -1165,7 +1166,7 @@ class SupabaseApi(private val environmentConfig: EnvironmentConfig) {
                 "customer_id" to customerId,
                 "reward_id" to rewardId,
                 "store_id" to storeId,
-                "claimed_at" to java.time.Instant.now().toString(),
+                "claimed_at" to java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'", java.util.Locale.getDefault()).format(Date()),
                 "is_claimed" to true
             )
             
@@ -1188,6 +1189,170 @@ class SupabaseApi(private val environmentConfig: EnvironmentConfig) {
             }
         } catch (e: Exception) {
             Log.e("SupabaseApi", "Error claiming reward: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Get all rewards for a store
+     */
+    suspend fun getRewards(storeId: String, authToken: String): Result<List<Reward>> {
+        return try {
+            Log.d("SupabaseApi", "Getting rewards for store: $storeId")
+            
+            val response = client.get("$baseUrl/rest/v1/rewards?store_id=eq.$storeId&order=created_at.desc") {
+                headers {
+                    append("apikey", anonKey)
+                    append("Authorization", "Bearer $authToken")
+                }
+            }
+            
+            if (response.status.isSuccess()) {
+                val rewards = response.body<List<Reward>>()
+                Log.d("SupabaseApi", "Found ${rewards.size} rewards")
+                Result.success(rewards)
+            } else {
+                Log.e("SupabaseApi", "Failed to get rewards: ${response.status}")
+                Result.failure(Exception("Failed to get rewards: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            Log.e("SupabaseApi", "Error getting rewards: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Create a new reward
+     */
+    suspend fun createReward(rewardData: Map<String, String>, authToken: String): Result<Reward> {
+        return try {
+            Log.d("SupabaseApi", "Creating new reward: ${rewardData["name"]}")
+            
+            val response = client.post("$baseUrl/rest/v1/rewards") {
+                contentType(ContentType.Application.Json)
+                headers {
+                    append("apikey", anonKey)
+                    append("Authorization", "Bearer $authToken")
+                }
+                setBody(rewardData)
+            }
+            
+            if (response.status.isSuccess()) {
+                try {
+                    val createdReward = response.body<Reward>()
+                    Log.d("SupabaseApi", "Reward created successfully")
+                    Result.success(createdReward)
+                } catch (e: Exception) {
+                    // Supabase sometimes returns empty response or no content type
+                    // If the status is success, the reward was created
+                    Log.d("SupabaseApi", "Reward created successfully (no response body)")
+                    // Create a dummy reward object since we know it was created
+                    val dummyReward = Reward(
+                        id = rewardData["id"] ?: "",
+                        name = rewardData["name"] ?: "",
+                        description = rewardData["description"],
+                        pointsRequired = rewardData["points_required"]?.toIntOrNull() ?: 0,
+                        storeId = rewardData["store_id"] ?: "",
+                        isActive = rewardData["is_active"]?.toBoolean() ?: true
+                    )
+                    Result.success(dummyReward)
+                }
+            } else {
+                Log.e("SupabaseApi", "Failed to create reward: ${response.status}")
+                Result.failure(Exception("Failed to create reward: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            Log.e("SupabaseApi", "Error creating reward: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Update an existing reward
+     */
+    suspend fun updateReward(rewardData: Map<String, String>, authToken: String): Result<Reward> {
+        return try {
+            Log.d("SupabaseApi", "Updating reward: ${rewardData["id"]}")
+            val response = client.patch("$baseUrl/rest/v1/rewards?id=eq.${rewardData["id"]}") {
+                contentType(ContentType.Application.Json)
+                headers {
+                    append("apikey", anonKey)
+                    append("Authorization", "Bearer $authToken")
+                }
+                setBody(rewardData)
+            }
+            if (response.status.isSuccess()) {
+                val updatedReward = response.body<List<Reward>>().firstOrNull()
+                if (updatedReward != null) {
+                    Log.d("SupabaseApi", "Reward updated successfully")
+                    Result.success(updatedReward)
+                } else {
+                    Log.e("SupabaseApi", "No reward returned after update")
+                    Result.failure(Exception("No reward returned after update"))
+                }
+            } else {
+                Log.e("SupabaseApi", "Failed to update reward: ${response.status}")
+                Result.failure(Exception("Failed to update reward: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            Log.e("SupabaseApi", "Error updating reward: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Delete a reward
+     */
+    suspend fun deleteReward(rewardId: String, authToken: String): Result<Unit> {
+        return try {
+            Log.d("SupabaseApi", "Deleting reward: $rewardId")
+            
+            val response = client.delete("$baseUrl/rest/v1/rewards?id=eq.$rewardId") {
+                headers {
+                    append("apikey", anonKey)
+                    append("Authorization", "Bearer $authToken")
+                }
+            }
+            
+            if (response.status.isSuccess()) {
+                Log.d("SupabaseApi", "Reward deleted successfully")
+                Result.success(Unit)
+            } else {
+                Log.e("SupabaseApi", "Failed to delete reward: ${response.status}")
+                Result.failure(Exception("Failed to delete reward: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            Log.e("SupabaseApi", "Error deleting reward: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Upload image for reward
+     */
+    suspend fun uploadRewardImage(imageBytes: ByteArray, fileName: String, authToken: String): Result<String> {
+        return try {
+            Log.d("SupabaseApi", "Uploading reward image: $fileName")
+            
+            val response = client.post("$baseUrl/storage/v1/object/photos/$fileName") {
+                headers {
+                    append("apikey", anonKey)
+                    append("Authorization", "Bearer $authToken")
+                    append("Content-Type", "image/jpeg")
+                }
+                setBody(imageBytes)
+            }
+            
+            if (response.status.isSuccess()) {
+                val imageUrl = "$baseUrl/storage/v1/object/public/photos/$fileName"
+                Log.d("SupabaseApi", "Image uploaded successfully: $imageUrl")
+                Result.success(imageUrl)
+            } else {
+                Log.e("SupabaseApi", "Failed to upload image: ${response.status}")
+                Result.failure(Exception("Failed to upload image: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            Log.e("SupabaseApi", "Error uploading image: ${e.message}", e)
             Result.failure(e)
         }
     }

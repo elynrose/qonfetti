@@ -5,6 +5,7 @@ import android.content.Intent
 import android.nfc.NfcAdapter
 import android.nfc.Tag
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -19,6 +20,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.qonfetty.config.EnvironmentConfig
 import com.example.qonfetty.data.CustomerWithPoints
+import com.example.qonfetty.data.DataRefreshManager
 import com.example.qonfetty.data.SessionStorage
 import com.example.qonfetty.data.SupabaseApi
 import com.example.qonfetty.data.NfcOperationState
@@ -38,6 +40,8 @@ import com.example.qonfetty.ui.NfcPointsUiState
 import com.example.qonfetty.ui.theme.QonfettyTheme
 import kotlinx.coroutines.launch
 import com.example.qonfetty.ui.DashboardUiState
+import com.example.qonfetty.ui.RewardsScreen
+import com.example.qonfetty.ui.RewardsViewModel
 
 class MainActivity : ComponentActivity() {
     
@@ -53,6 +57,7 @@ class MainActivity : ComponentActivity() {
     // Global ViewModels for NFC handling
     private var globalNfcPointsViewModel: NfcPointsViewModel? = null
     private var globalDashboardViewModel: DashboardViewModel? = null
+    private var globalDataRefreshManager: DataRefreshManager? = null
     
     // Global NFC test callback
     private var globalNfcTestCallback: ((android.nfc.Tag) -> Unit)? = null
@@ -80,6 +85,7 @@ class MainActivity : ComponentActivity() {
                     var selectedCustomer by remember { mutableStateOf<CustomerWithPoints?>(null) }
                     var showNfcScanResult by remember { mutableStateOf(false) }
                     var showNfcTest by remember { mutableStateOf(false) }
+                    var showRewards by remember { mutableStateOf(false) }
                     var inactivityMessage by remember { mutableStateOf<String?>(null) }
                     
                     // Initialize environment configuration
@@ -92,9 +98,12 @@ class MainActivity : ComponentActivity() {
                         val api = SupabaseApi(environmentConfig)
                         supabaseApi = api
                         
+                        // Initialize DataRefreshManager
+                        globalDataRefreshManager = DataRefreshManager(api, sessionStorage)
+                        
                         // Initialize global ViewModels for NFC handling
                         globalNfcPointsViewModel = NfcPointsViewModel(api, sessionStorage, nfcManager!!)
-                        globalDashboardViewModel = DashboardViewModel(api, sessionStorage, nfcManager!!)
+                        globalDashboardViewModel = DashboardViewModel(api, sessionStorage, nfcManager!!, globalDataRefreshManager)
                     }
                     
                     if (supabaseApi != null) {
@@ -104,9 +113,18 @@ class MainActivity : ComponentActivity() {
                         
                         val isLoggedIn by viewModel.isLoggedIn.collectAsStateWithLifecycle()
                         
-                        // Update global authentication state
+                        // Update global authentication state and manage data refresh
                         LaunchedEffect(isLoggedIn) {
                             globalIsLoggedIn = isLoggedIn
+                            
+                            // Start/stop data refresh based on login status
+                            if (isLoggedIn) {
+                                globalDataRefreshManager?.startPeriodicRefresh()
+                                Log.d("MainActivity", "Started periodic data refresh")
+                            } else {
+                                globalDataRefreshManager?.stopPeriodicRefresh()
+                                Log.d("MainActivity", "Stopped periodic data refresh")
+                            }
                         }
                         
                         // Set up callback to set inactivity message
@@ -232,9 +250,19 @@ class MainActivity : ComponentActivity() {
                                     isProcessing = isNfcProcessing
                                 )
                             }
+                            showRewards -> {
+                                val rewardsViewModel: RewardsViewModel = viewModel {
+                                    RewardsViewModel(supabaseApi!!, sessionStorage, globalDataRefreshManager)
+                                }
+                                
+                                RewardsScreen(
+                                    viewModel = rewardsViewModel,
+                                    onBack = { showRewards = false }
+                                )
+                            }
                             selectedCustomer != null -> {
                                 val customerDetailViewModel: CustomerDetailViewModel = viewModel {
-                                    CustomerDetailViewModel(supabaseApi!!, sessionStorage)
+                                    CustomerDetailViewModel(supabaseApi!!, sessionStorage, globalDataRefreshManager)
                                 }
                                 
                                 // Check if we need to redirect to login due to auth error
@@ -259,7 +287,7 @@ class MainActivity : ComponentActivity() {
                             }
                             showCustomers -> {
                                 val customerViewModel: CustomerViewModel = viewModel {
-                                    CustomerViewModel(supabaseApi!!, sessionStorage)
+                                    CustomerViewModel(supabaseApi!!, sessionStorage, globalDataRefreshManager)
                                 }
                                 
                                 // Check if we need to redirect to login due to auth error
@@ -299,7 +327,8 @@ class MainActivity : ComponentActivity() {
                                         viewModel = viewModel,
                                         dashboardViewModel = dashboardViewModel,
                                         onShowCustomers = { showCustomers = true },
-                                        onShowNfcTest = { showNfcTest = true }
+                                        onShowNfcTest = { showNfcTest = true },
+                                        onShowRewards = { showRewards = true }
                                     )
                                 }
                             }
@@ -332,6 +361,12 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         nfcManager?.disableNfcForegroundDispatch()
+    }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        // nfcManager?.cleanup()
+        globalDataRefreshManager?.cleanup()
     }
     
     override fun onNewIntent(intent: Intent) {

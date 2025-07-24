@@ -6,6 +6,7 @@ import com.example.qonfetty.data.SupabaseApi
 import com.example.qonfetty.data.SessionStorage
 import com.example.qonfetty.data.PointsTransaction
 import com.example.qonfetty.data.PointsTransactionWithCustomer
+import com.example.qonfetty.data.DataRefreshManager
 import com.example.qonfetty.nfc.NfcManager
 import com.example.qonfetty.nfc.NfcPointsManager
 import com.example.qonfetty.nfc.NfcProcessingResult
@@ -18,7 +19,8 @@ import android.util.Log
 class DashboardViewModel(
     private val supabaseApi: SupabaseApi,
     private val sessionStorage: SessionStorage,
-    private val nfcManager: NfcManager
+    private val nfcManager: NfcManager,
+    private val dataRefreshManager: DataRefreshManager? = null
 ) : ViewModel() {
     
     private val nfcPointsManager = NfcPointsManager(supabaseApi, sessionStorage, nfcManager)
@@ -35,8 +37,30 @@ class DashboardViewModel(
     private val _recentActivity = MutableStateFlow<List<PointsTransactionWithCustomer>>(emptyList())
     val recentActivity: StateFlow<List<PointsTransactionWithCustomer>> = _recentActivity.asStateFlow()
     
+    private val _refreshState = MutableStateFlow<DataRefreshManager.RefreshState>(DataRefreshManager.RefreshState.Idle)
+    val refreshState: StateFlow<DataRefreshManager.RefreshState> = _refreshState.asStateFlow()
+    
     init {
         loadRecentActivity()
+        
+        // Observe live data from DataRefreshManager if available
+        dataRefreshManager?.let { manager ->
+            viewModelScope.launch {
+                manager.recentActivityData.collect { transactions ->
+                    if (transactions.isNotEmpty()) {
+                        _recentActivity.value = transactions
+                        Log.d("DashboardViewModel", "Received live update: ${transactions.size} transactions")
+                    }
+                }
+            }
+            
+            // Observe refresh state
+            viewModelScope.launch {
+                manager.refreshState.collect { state ->
+                    _refreshState.value = state
+                }
+            }
+        }
     }
     
     /**
@@ -143,7 +167,10 @@ class DashboardViewModel(
                             _scanHistory.value = currentHistory
                         }
                         
-                        // Refresh recent activity from database
+                        // Trigger immediate refresh of activity data
+                        dataRefreshManager?.triggerRefresh(DataRefreshManager.DataType.ACTIVITY)
+                        
+                        // Also refresh recent activity from database for immediate update
                         loadRecentActivity()
                         
                         _uiState.value = DashboardUiState.ScanSuccess(processingResult)

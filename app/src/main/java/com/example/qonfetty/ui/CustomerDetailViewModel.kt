@@ -3,6 +3,7 @@ package com.example.qonfetty.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.qonfetty.data.*
+import com.example.qonfetty.data.DataRefreshManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,7 +26,8 @@ sealed class RewardOperationState {
 
 class CustomerDetailViewModel(
     private val supabaseApi: SupabaseApi,
-    private val sessionStorage: SessionStorage
+    private val sessionStorage: SessionStorage,
+    private val dataRefreshManager: DataRefreshManager? = null
 ) : ViewModel() {
     
     private val _nfcCards = MutableStateFlow<List<NfcCardResponse>>(emptyList())
@@ -43,10 +45,29 @@ class CustomerDetailViewModel(
     private val _rewardOperationState = MutableStateFlow<RewardOperationState>(RewardOperationState.Idle)
     val rewardOperationState: StateFlow<RewardOperationState> = _rewardOperationState.asStateFlow()
     
+    // Current customer ID for live updates
+    private var currentCustomerId: String? = null
+    
     fun loadCustomerData(customerId: String) {
+        currentCustomerId = customerId
         loadCustomerNfcCards(customerId)
         loadCustomerTotalPoints(customerId)
         loadClaimableRewards(customerId)
+        
+        // Set up live points updates if DataRefreshManager is available
+        dataRefreshManager?.let { manager ->
+            viewModelScope.launch {
+                manager.customerPointsData.collect { pointsMap ->
+                    pointsMap[customerId]?.let { points ->
+                        _totalPoints.value = points
+                        Log.d("CustomerDetailViewModel", "Received live points update for customer $customerId: $points")
+                        
+                        // Refresh claimable rewards when points change
+                        loadClaimableRewards(customerId)
+                    }
+                }
+            }
+        }
     }
     
     fun loadCustomerTotalPoints(customerId: String) {
