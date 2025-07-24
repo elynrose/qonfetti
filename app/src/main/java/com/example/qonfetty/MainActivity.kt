@@ -80,6 +80,25 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
+        // Enable edge-to-edge display
+        enableEdgeToEdge()
+        
+        // Configure status bar with logo color for Android 15+
+        window.statusBarColor = android.graphics.Color.parseColor("#1E3A8A")
+        window.navigationBarColor = android.graphics.Color.parseColor("#1E3A8A")
+        
+        // Set status bar appearance for light icons on dark background
+        val insetsController = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
+        insetsController.isAppearanceLightStatusBars = false
+        insetsController.isAppearanceLightNavigationBars = false
+        
+        // For Android 15+, try setting the status bar color in the theme
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            // Android 15+ specific configuration
+            window.statusBarColor = android.graphics.Color.parseColor("#1E3A8A")
+            insetsController.isAppearanceLightStatusBars = false
+        }
+        
         // Initialize NFC manager
         nfcManager = NfcManager(this)
         

@@ -5,6 +5,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.background
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
@@ -20,6 +21,9 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowForward
 
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -34,6 +38,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import com.example.qonfetty.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.qonfetty.data.PointsTransaction
 import com.example.qonfetty.data.PointsTransactionWithCustomer
@@ -43,6 +50,7 @@ import com.example.qonfetty.ui.components.LiveDataIndicator
 import com.example.qonfetty.ui.theme.StatusBarSpacer
 import java.text.SimpleDateFormat
 import java.util.*
+import android.util.Log
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
@@ -131,7 +139,18 @@ fun DashboardScreen(
             }
             
             // Store Information Card
-            StoreInfoCard(uiState = uiState, storeInfo = storeInfo, storeSettings = storeSettings)
+            StoreInfoCard(
+                uiState = uiState, 
+                storeInfo = storeInfo, 
+                storeSettings = storeSettings,
+                promotionalMode = dashboardViewModel.promotionalMode.collectAsStateWithLifecycle().value,
+                onTogglePromotionalMode = { dashboardViewModel.togglePromotionalMode() },
+                weeksBack = dashboardViewModel.weeksBack.collectAsStateWithLifecycle().value,
+                weekRangeText = dashboardViewModel.getWeekRangeText(),
+                onPreviousWeek = { dashboardViewModel.goToPreviousWeek() },
+                onNextWeek = { dashboardViewModel.goToNextWeek() },
+                transactionStats = transactionStats
+            )
             
             Spacer(modifier = Modifier.height(16.dp))
             
@@ -336,22 +355,22 @@ private fun DashboardHeader(
                         onDismissRequest = { expanded = false }
                     ) {
                         DropdownMenuItem(
+                            text = { Text("Store Settings") },
+                            leadingIcon = { 
+                                Icon(Icons.Filled.Settings, contentDescription = null)
+                            },
+                            onClick = {
+                                onShowSettings()
+                                expanded = false
+                            }
+                        )
+                        DropdownMenuItem(
                             text = { Text("Manage Customers") },
                             leadingIcon = { 
                                 Icon(Icons.Filled.Person, contentDescription = null)
                             },
                             onClick = {
                                 onShowCustomers()
-                                expanded = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Write to Card") },
-                            leadingIcon = { 
-                                Icon(Icons.Filled.Star, contentDescription = null)
-                            },
-                            onClick = {
-                                onShowNfcTest()
                                 expanded = false
                             }
                         )
@@ -366,12 +385,12 @@ private fun DashboardHeader(
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text("Store Settings") },
+                            text = { Text("Write to Card") },
                             leadingIcon = { 
-                                Icon(Icons.Filled.Settings, contentDescription = null)
+                                Icon(Icons.Filled.Star, contentDescription = null)
                             },
                             onClick = {
-                                onShowSettings()
+                                onShowNfcTest()
                                 expanded = false
                             }
                         )
@@ -630,7 +649,14 @@ private fun NfcScanResultCard(
 private fun StoreInfoCard(
     uiState: com.example.qonfetty.ui.AuthUiState,
     storeInfo: com.example.qonfetty.data.Store?,
-    storeSettings: com.example.qonfetty.data.StoreSettings?
+    storeSettings: com.example.qonfetty.data.StoreSettings?,
+    promotionalMode: Boolean = false,
+    onTogglePromotionalMode: () -> Unit = {},
+    weeksBack: Int = 0,
+    weekRangeText: String = "Current Week",
+    onPreviousWeek: () -> Unit = {},
+    onNextWeek: () -> Unit = {},
+    transactionStats: com.example.qonfetty.data.TransactionStats? = null
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -655,6 +681,23 @@ private fun StoreInfoCard(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
+                Spacer(modifier = Modifier.weight(1f))
+                // Promotional Mode Toggle Star
+                IconButton(
+                    onClick = onTogglePromotionalMode,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Star,
+                        contentDescription = if (promotionalMode) "Disable Promotional Mode" else "Enable Promotional Mode",
+                        tint = if (promotionalMode) {
+                            Color(0xFFFFD700) // Gold color when active
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
             
             Spacer(modifier = Modifier.height(12.dp))
@@ -700,12 +743,12 @@ private fun StoreInfoCard(
                                     )
                                 }
                             } ?: run {
-                                // No store settings, show initials
-                                Text(
-                                    text = store.name.take(2).uppercase(),
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                // No store settings, show app logo
+                                Image(
+                                    painter = painterResource(id = R.drawable.logo),
+                                    contentDescription = "Qonfetty Logo",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Fit
                                 )
                             }
                         }
@@ -716,7 +759,7 @@ private fun StoreInfoCard(
                         modifier = Modifier.weight(1f)
                     ) {
                         Text(
-                            text = store.name,
+                            text = storeSettings?.storeName?.takeIf { it.isNotEmpty() } ?: store.name,
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -732,7 +775,187 @@ private fun StoreInfoCard(
                 Spacer(modifier = Modifier.height(16.dp))
             }
             
-
+            // Week Navigation Filter
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp)
+                ) {
+                    Text(
+                        text = "Time Range",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Previous Week Button
+                        IconButton(
+                            onClick = onPreviousWeek,
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.ArrowBack,
+                                contentDescription = "Previous week",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        
+                        // Current Week Range Text
+                        Text(
+                            text = weekRangeText,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.weight(1f)
+                        )
+                        
+                        // Next Week Button
+                        IconButton(
+                            onClick = onNextWeek,
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.ArrowForward,
+                                contentDescription = "Next week",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Analytics Chart
+            transactionStats?.let { stats ->
+                // Debug logging for chart values
+                Log.d("DashboardScreen", "🔍 CHART: Rendering chart with stats - Purchases: ${stats.totalPurchases}, Claims: ${stats.totalClaimed}")
+                
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp)
+                    ) {
+                        Text(
+                            text = "Purchases vs Claims",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        
+                        // Check if there's any data for this time period
+                        if (stats.totalPurchases == 0.0 && stats.totalClaimed == 0.0) {
+                            // No data indicator
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 32.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.DateRange,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(48.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(
+                                    text = "No data for this time period",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "Try a different time range or add some transactions",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        } else {
+                            // Simple bar chart
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(120.dp),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                verticalAlignment = Alignment.Bottom
+                            ) {
+                                // Purchases bar
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    val maxValue = maxOf(stats.totalPurchases.toDouble(), stats.totalClaimed.toDouble(), 1.0)
+                                    val purchaseHeight = (stats.totalPurchases.toDouble() / maxValue * 80).toInt()
+                                    
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(purchaseHeight.dp)
+                                            .background(
+                                                color = MaterialTheme.colorScheme.primary,
+                                                shape = MaterialTheme.shapes.small
+                                            )
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "$${String.format("%.2f", stats.totalPurchases)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "Purchases",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                
+                                // Claims bar
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    val maxValue = maxOf(stats.totalPurchases.toDouble(), stats.totalClaimed.toDouble(), 1.0)
+                                    val claimHeight = (stats.totalClaimed.toDouble() / maxValue * 80).toInt()
+                                    
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(claimHeight.dp)
+                                            .background(
+                                                color = MaterialTheme.colorScheme.secondary,
+                                                shape = MaterialTheme.shapes.small
+                                            )
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "$${String.format("%.2f", stats.totalClaimed)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "Claims",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

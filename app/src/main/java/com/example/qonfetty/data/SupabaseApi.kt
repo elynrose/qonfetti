@@ -1855,6 +1855,55 @@ class SupabaseApi(private val environmentConfig: EnvironmentConfig) {
     }
     
     /**
+     * Get transaction statistics for dashboard with date range filter
+     */
+    suspend fun getTransactionStatsWithDateRange(storeId: String, startDate: Long?, endDate: Long?, authToken: String): Result<TransactionStats> {
+        return try {
+            Log.d("SupabaseApi", "Fetching transaction stats for store: $storeId with date range: ${startDate?.let { java.util.Date(it) }} to ${endDate?.let { java.util.Date(it) }}")
+            Log.d("SupabaseApi", "🔍 DEBUG: Raw timestamps - startDate: $startDate, endDate: $endDate")
+
+            val requestBody = mutableMapOf("store_id_param" to storeId)
+            if (startDate != null) {
+                requestBody["start_date_param"] = startDate.toString()
+            }
+            if (endDate != null) {
+                requestBody["end_date_param"] = endDate.toString()
+            }
+
+            Log.d("SupabaseApi", "🔍 DEBUG: Request body: $requestBody")
+            
+            val response = client.post("$baseUrl/rest/v1/rpc/get_transaction_stats_with_date_range") {
+                contentType(ContentType.Application.Json)
+                headers {
+                    append("apikey", anonKey)
+                    append("Authorization", "Bearer $authToken")
+                }
+                setBody(requestBody)
+            }
+            
+            if (response.status.isSuccess()) {
+                // RPC functions return an array, so we need to handle that
+                val statsArray = response.body<List<TransactionStats>>()
+                if (statsArray.isNotEmpty()) {
+                    val stats = statsArray.first()
+                    Log.d("SupabaseApi", "Transaction stats with date range fetched successfully: $stats")
+                    Result.success(stats)
+                } else {
+                    Log.e("SupabaseApi", "No transaction stats returned for date range")
+                    Result.failure(Exception("No transaction stats returned for date range"))
+                }
+            } else {
+                val errorBody = response.body<String>()
+                Log.e("SupabaseApi", "Failed to fetch transaction stats with date range: ${response.status}, body: $errorBody")
+                Result.failure(Exception("Failed to fetch transaction stats with date range: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            Log.e("SupabaseApi", "Error fetching transaction stats with date range: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
      * Get transactions for a specific customer
      */
     suspend fun getCustomerTransactions(customerId: String, storeId: String, authToken: String): Result<List<Transaction>> {

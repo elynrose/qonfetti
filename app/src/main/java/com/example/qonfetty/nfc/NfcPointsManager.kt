@@ -20,8 +20,8 @@ class NfcPointsManager(
     /**
      * Process NFC card and award points to customer
      */
-    suspend fun processNfcCard(tag: Tag): Result<NfcProcessingResult> {
-        val result = processNfcCardWithoutAwarding(tag)
+    suspend fun processNfcCard(tag: Tag, promotionalMode: Boolean = false): Result<NfcProcessingResult> {
+        val result = processNfcCardWithoutAwarding(tag, promotionalMode)
         return if (result.isSuccess && result.getOrNull() is NfcProcessingResult.Success) {
             awardPointsToCustomer(result.getOrNull() as NfcProcessingResult.Success)
         } else {
@@ -32,7 +32,7 @@ class NfcPointsManager(
     /**
      * Process NFC card without awarding points (for confirmation step)
      */
-    suspend fun processNfcCardWithoutAwarding(tag: Tag): Result<NfcProcessingResult> {
+    suspend fun processNfcCardWithoutAwarding(tag: Tag, promotionalMode: Boolean = false): Result<NfcProcessingResult> {
         return try {
             Log.d("NfcPointsManager", "Processing NFC card")
             
@@ -71,18 +71,34 @@ class NfcPointsManager(
                 return Result.failure(Exception("Not authenticated. Please login again."))
             }
             
+            // Get store settings to determine points per purchase
+            val storeId = sessionStorage.getStoreId()
+            if (storeId == null) {
+                Log.e("NfcPointsManager", "No store ID available")
+                return Result.failure(Exception("Store not found. Please login again."))
+            }
+            
+            val storeSettingsResult = supabaseApi.getStoreSettings(storeId, authToken)
+            val storeSettings = storeSettingsResult.getOrNull()
+            val pointsPerPurchase = if (promotionalMode && storeSettings?.promotionalEnabled == true) {
+                storeSettings.promotionPointsPerPurchase
+            } else {
+                storeSettings?.pointsPerPurchase ?: 1
+            }
+            
+            Log.d("NfcPointsManager", "Store settings - promotional mode: $promotionalMode, points per purchase: $pointsPerPurchase")
+            
             // Get current customer points
-            val currentPointsResult = supabaseApi.getCustomerPoints(customer.id!!, sessionStorage.getStoreId() ?: "", authToken)
+            val currentPointsResult = supabaseApi.getCustomerPoints(customer.id!!, storeId, authToken)
             val currentPoints = currentPointsResult.getOrNull()?.points ?: 0
             
             Log.d("NfcPointsManager", "Current points for customer ${customer.name}: $currentPoints")
             
-            // Get claimable rewards for current points + 1 (what they would have after award)
-            val storeId = sessionStorage.getStoreId()
+            // Get claimable rewards for current points + pointsPerPurchase (what they would have after award)
             val rewards = if (!storeId.isNullOrEmpty()) {
                 val rewardsResult = supabaseApi.getClaimableRewards(
                     storeId = storeId,
-                    currentPoints = currentPoints + 1, // Points they would have after award
+                    currentPoints = currentPoints + pointsPerPurchase, // Points they would have after award
                     authToken = authToken
                 )
                 rewardsResult.getOrNull() ?: emptyList()
@@ -93,8 +109,8 @@ class NfcPointsManager(
             // Create a preview result (points not actually awarded yet)
             val processingResult = NfcProcessingResult.Success(
                 customer = customer,
-                pointsAwarded = 1,
-                newTotalPoints = currentPoints + 1, // What they would have after award
+                pointsAwarded = pointsPerPurchase,
+                newTotalPoints = currentPoints + pointsPerPurchase, // What they would have after award
                 claimableRewards = rewards,
                 nfcCardId = nfcCard.cardId
             )

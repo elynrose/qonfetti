@@ -39,6 +39,9 @@ class DataRefreshManager(
     private val _rewardsData = MutableStateFlow<List<Reward>>(emptyList())
     val rewardsData: StateFlow<List<Reward>> = _rewardsData.asStateFlow()
     
+    private val _transactionStatsData = MutableStateFlow<TransactionStats?>(null)
+    val transactionStatsData: StateFlow<TransactionStats?> = _transactionStatsData.asStateFlow()
+    
     // Refresh state
     private val _refreshState = MutableStateFlow<RefreshState>(RefreshState.Idle)
     val refreshState: StateFlow<RefreshState> = _refreshState.asStateFlow()
@@ -49,6 +52,7 @@ class DataRefreshManager(
     private var activityRefreshJob: Job? = null
     private var pointsRefreshJob: Job? = null
     private var rewardsRefreshJob: Job? = null
+    private var transactionStatsRefreshJob: Job? = null
     
     sealed class RefreshState {
         object Idle : RefreshState()
@@ -82,6 +86,11 @@ class DataRefreshManager(
         rewardsRefreshJob = startPeriodicJob(REWARDS_REFRESH_INTERVAL) {
             refreshRewards()
         }
+        
+        // Start transaction stats refresh
+        transactionStatsRefreshJob = startPeriodicJob(DASHBOARD_REFRESH_INTERVAL) {
+            refreshTransactionStats()
+        }
     }
     
     /**
@@ -95,12 +104,14 @@ class DataRefreshManager(
         activityRefreshJob?.cancel()
         pointsRefreshJob?.cancel()
         rewardsRefreshJob?.cancel()
+        transactionStatsRefreshJob?.cancel()
         
         customersRefreshJob = null
         dashboardRefreshJob = null
         activityRefreshJob = null
         pointsRefreshJob = null
         rewardsRefreshJob = null
+        transactionStatsRefreshJob = null
     }
     
     /**
@@ -119,7 +130,8 @@ class DataRefreshManager(
                 val results = awaitAll(
                     async { refreshCustomers() },
                     async { refreshRecentActivity() },
-                    async { refreshCustomerPoints() }
+                    async { refreshCustomerPoints() },
+                    async { refreshTransactionStats() }
                 )
                 
                 val hasErrors = results.any { it.isFailure }
@@ -271,6 +283,37 @@ class DataRefreshManager(
             )
         } catch (e: Exception) {
             Log.e("DataRefreshManager", "Error refreshing rewards: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Refresh transaction stats data
+     */
+    private suspend fun refreshTransactionStats(): Result<Unit> {
+        return try {
+            val authToken = sessionStorage.getAuthToken()
+            val storeId = sessionStorage.getStoreId()
+            
+            if (authToken == null || storeId == null) {
+                Log.w("DataRefreshManager", "No auth token or store ID available for transaction stats refresh")
+                return Result.failure(Exception("Not authenticated or no store"))
+            }
+            
+            val result = supabaseApi.getTransactionStats(storeId, authToken)
+            result.fold(
+                onSuccess = { stats ->
+                    _transactionStatsData.value = stats
+                    Log.d("DataRefreshManager", "Refreshed transaction stats")
+                    Result.success(Unit)
+                },
+                onFailure = { exception ->
+                    Log.e("DataRefreshManager", "Failed to refresh transaction stats: ${exception.message}", exception)
+                    Result.failure(exception)
+                }
+            )
+        } catch (e: Exception) {
+            Log.e("DataRefreshManager", "Error refreshing transaction stats: ${e.message}", e)
             Result.failure(e)
         }
     }

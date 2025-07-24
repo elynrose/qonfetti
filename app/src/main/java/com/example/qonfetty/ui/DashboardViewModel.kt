@@ -51,6 +51,12 @@ class DashboardViewModel(
     private val _storeSettings = MutableStateFlow<StoreSettings?>(null)
     val storeSettings: StateFlow<StoreSettings?> = _storeSettings.asStateFlow()
     
+    private val _promotionalMode = MutableStateFlow(false)
+    val promotionalMode: StateFlow<Boolean> = _promotionalMode.asStateFlow()
+    
+    private val _weeksBack = MutableStateFlow(1) // Start with last 7 days (1 week)
+    val weeksBack: StateFlow<Int> = _weeksBack.asStateFlow()
+    
     private val _refreshState = MutableStateFlow<DataRefreshManager.RefreshState>(DataRefreshManager.RefreshState.Idle)
     val refreshState: StateFlow<DataRefreshManager.RefreshState> = _refreshState.asStateFlow()
     
@@ -67,6 +73,16 @@ class DashboardViewModel(
                     if (transactions.isNotEmpty()) {
                         _recentActivity.value = transactions
                         Log.d("DashboardViewModel", "Received live update: ${transactions.size} transactions")
+                    }
+                }
+            }
+            
+            // Observe transaction stats live updates
+            viewModelScope.launch {
+                manager.transactionStatsData.collect { stats ->
+                    if (stats != null) {
+                        _transactionStats.value = stats
+                        Log.d("DashboardViewModel", "Received live transaction stats update")
                     }
                 }
             }
@@ -159,7 +175,7 @@ class DashboardViewModel(
             _uiState.value = DashboardUiState.Scanning
             
             try {
-                val result = nfcPointsManager.processNfcCardWithoutAwarding(tag)
+                val result = nfcPointsManager.processNfcCardWithoutAwarding(tag, _promotionalMode.value)
                 
                 result.fold(
                     onSuccess = { processingResult ->
@@ -321,12 +337,22 @@ class DashboardViewModel(
                     return@launch
                 }
                 
-                val result = supabaseApi.getTransactionStats(storeId, authToken)
+                val weeksBack = _weeksBack.value
+                val endDate = System.currentTimeMillis() - ((weeksBack - 1) * 7 * 24 * 60 * 60 * 1000L) // End date for this week
+                val startDate = endDate - (7 * 24 * 60 * 60 * 1000L) // Start date for this week (7 days before end)
+                
+                Log.d("DashboardViewModel", "🔍 LOAD STATS: weeksBack = $weeksBack")
+                Log.d("DashboardViewModel", "🔍 LOAD STATS: startDate = ${java.util.Date(startDate)}")
+                Log.d("DashboardViewModel", "🔍 LOAD STATS: endDate = ${java.util.Date(endDate)}")
+                
+                val result = supabaseApi.getTransactionStatsWithDateRange(storeId, startDate, endDate, authToken)
                 
                 result.fold(
                     onSuccess = { stats ->
                         Log.d("DashboardViewModel", "Successfully loaded transaction stats: $stats")
+                        Log.d("DashboardViewModel", "🔍 UI UPDATE: Setting new transaction stats - Purchases: ${stats.totalPurchases}, Claims: ${stats.totalClaimed}")
                         _transactionStats.value = stats
+                        Log.d("DashboardViewModel", "🔍 UI UPDATE: Transaction stats state updated")
                     },
                     onFailure = { exception ->
                         Log.e("DashboardViewModel", "Failed to load transaction stats: ${exception.message}", exception)
@@ -389,6 +415,76 @@ class DashboardViewModel(
         loadTransactionStats()
         loadStoreInfo()
         loadStoreSettings()
+    }
+    
+    /**
+     * Toggle promotional mode
+     */
+    fun togglePromotionalMode() {
+        val currentMode = _promotionalMode.value
+        _promotionalMode.value = !currentMode
+        Log.d("DashboardViewModel", "Promotional mode toggled: ${!currentMode}")
+    }
+    
+    /**
+     * Set date range for filtering analytics
+     */
+    fun setDateRange(startDate: Long?, endDate: Long?) {
+        // This function is no longer needed as date range is handled by weeksBack
+        // Keeping it for now, but it will not affect the transaction stats loading
+        Log.d("DashboardViewModel", "Date range set (ignored for now): ${startDate?.let { java.util.Date(it) }} to ${endDate?.let { java.util.Date(it) }}")
+    }
+    
+    /**
+     * Clear date range filter
+     */
+    fun clearDateRange() {
+        // This function is no longer needed as date range is handled by weeksBack
+        Log.d("DashboardViewModel", "Date range cleared (ignored for now)")
+    }
+    
+    /**
+     * Navigate to previous week (go back further in time)
+     */
+    fun goToPreviousWeek() {
+        val currentWeeks = _weeksBack.value
+        if (currentWeeks < 52) { // Limit to 1 year back
+            _weeksBack.value = currentWeeks + 1
+            Log.d("DashboardViewModel", "🔍 PREVIOUS WEEK: Navigated to ${_weeksBack.value} weeks back")
+            Log.d("DashboardViewModel", "🔍 PREVIOUS WEEK: Current weeks value = ${_weeksBack.value}")
+            loadTransactionStats()
+        } else {
+            Log.d("DashboardViewModel", "🔍 PREVIOUS WEEK: Already at maximum (52 weeks)")
+        }
+    }
+    
+    /**
+     * Navigate to next week (go forward in time)
+     */
+    fun goToNextWeek() {
+        val currentWeeks = _weeksBack.value
+        if (currentWeeks > 1) { // Don't go less than 1 week
+            _weeksBack.value = currentWeeks - 1
+            Log.d("DashboardViewModel", "🔍 NEXT WEEK: Navigated to ${_weeksBack.value} weeks back")
+            Log.d("DashboardViewModel", "🔍 NEXT WEEK: Current weeks value = ${_weeksBack.value}")
+            loadTransactionStats()
+        } else {
+            Log.d("DashboardViewModel", "🔍 NEXT WEEK: Already at minimum (1 week)")
+        }
+    }
+    
+    /**
+     * Get display text for current week range
+     */
+    fun getWeekRangeText(): String {
+        val weeks = _weeksBack.value
+        return when (weeks) {
+            1 -> "Last 7 Days"
+            2 -> "7-14 Days Ago"
+            3 -> "14-21 Days Ago"
+            4 -> "21-28 Days Ago"
+            else -> "${(weeks - 1) * 7}-${weeks * 7} Days Ago"
+        }
     }
 }
 
