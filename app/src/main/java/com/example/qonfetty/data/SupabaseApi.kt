@@ -1855,6 +1855,39 @@ class SupabaseApi(private val environmentConfig: EnvironmentConfig) {
     }
     
     /**
+     * Get transactions for a specific customer
+     */
+    suspend fun getCustomerTransactions(customerId: String, storeId: String, authToken: String): Result<List<Transaction>> {
+        return try {
+            Log.d("SupabaseApi", "Fetching transactions for customer: $customerId")
+            
+            val response = client.get("$baseUrl/rest/v1/transactions") {
+                headers {
+                    append("apikey", anonKey)
+                    append("Authorization", "Bearer $authToken")
+                }
+                parameter("select", "*")
+                parameter("customer_id", "eq.$customerId")
+                parameter("store_id", "eq.$storeId")
+                parameter("order", "created_at.desc")
+            }
+            
+            if (response.status.isSuccess()) {
+                val transactions = response.body<List<Transaction>>()
+                Log.d("SupabaseApi", "Fetched ${transactions.size} transactions for customer")
+                Result.success(transactions)
+            } else {
+                val errorBody = response.body<String>()
+                Log.e("SupabaseApi", "Failed to fetch customer transactions: ${response.status}, body: $errorBody")
+                Result.failure(Exception("Failed to fetch customer transactions: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            Log.e("SupabaseApi", "Error fetching customer transactions: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
      * Get recent transactions for a store
      */
     suspend fun getRecentTransactions(storeId: String, limit: Int = 10, authToken: String): Result<List<Transaction>> {

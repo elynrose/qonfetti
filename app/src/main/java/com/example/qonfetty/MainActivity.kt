@@ -47,6 +47,10 @@ import com.example.qonfetty.ui.StoreSettingsScreen
 import com.example.qonfetty.ui.StoreSettingsViewModel
 import com.example.qonfetty.ui.ClaimsScreen
 import com.example.qonfetty.ui.ClaimsViewModel
+import com.example.qonfetty.ui.ClaimedRewardsScreen
+import com.example.qonfetty.ui.ClaimedRewardsViewModel
+import com.example.qonfetty.ui.AddRewardsScreen
+import com.example.qonfetty.ui.AddRewardsViewModel
 
 class MainActivity : ComponentActivity() {
     
@@ -97,6 +101,8 @@ class MainActivity : ComponentActivity() {
                     var showRewards by remember { mutableStateOf(false) }
                     var showSettings by remember { mutableStateOf(false) }
                     var showClaims by remember { mutableStateOf<Pair<CustomerWithPoints, com.example.qonfetty.data.Reward>?>(null) }
+                    var showClaimedRewards by remember { mutableStateOf<CustomerWithPoints?>(null) }
+                    var showAddRewards by remember { mutableStateOf(false) }
                     var inactivityMessage by remember { mutableStateOf<String?>(null) }
                     
                     // Initialize environment configuration
@@ -186,7 +192,22 @@ class MainActivity : ComponentActivity() {
                         }
                         
                         when {
+                            showAddRewards -> {
+                                Log.d("MainActivity", "Navigation: showAddRewards = $showAddRewards")
+                                val addRewardsViewModel: AddRewardsViewModel = viewModel {
+                                    AddRewardsViewModel(supabaseApi!!, sessionStorage)
+                                }
+                                
+                                AddRewardsScreen(
+                                    viewModel = addRewardsViewModel,
+                                    onBack = { 
+                                        Log.d("MainActivity", "AddRewardsScreen back button clicked, setting showAddRewards = false")
+                                        showAddRewards = false 
+                                    }
+                                )
+                            }
                             showNfcScanResult -> {
+                                Log.d("MainActivity", "Navigation: showNfcScanResult = $showNfcScanResult")
                                 val scanResult by globalNfcPointsViewModel?.scanResult?.collectAsStateWithLifecycle() ?: remember { mutableStateOf(null) }
                                 scanResult?.let { result ->
                                     // Show NFC scan result screen
@@ -203,6 +224,7 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                             showNfcTest -> {
+                                Log.d("MainActivity", "Navigation: showNfcTest = $showNfcTest")
                                 // Show NFC test screen with proper NFC handling
                                 var nfcTestResult by remember { mutableStateOf<String?>(null) }
                                 var nfcTestError by remember { mutableStateOf<String?>(null) }
@@ -279,13 +301,18 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                             showRewards -> {
+                                Log.d("MainActivity", "Navigation: showRewards = $showRewards")
                                 val rewardsViewModel: RewardsViewModel = viewModel {
                                     RewardsViewModel(supabaseApi!!, sessionStorage, globalDataRefreshManager, globalSessionManager)
                                 }
                                 
                                 RewardsScreen(
                                     viewModel = rewardsViewModel,
-                                    onBack = { showRewards = false }
+                                    onBack = { showRewards = false },
+                                    onAddReward = { 
+                                        Log.d("MainActivity", "Add reward button clicked, setting showAddRewards = true")
+                                        showAddRewards = true 
+                                    }
                                 )
                             }
                             showSettings -> {
@@ -311,6 +338,18 @@ class MainActivity : ComponentActivity() {
                                     onBack = { showClaims = null }
                                 )
                             }
+                            showClaimedRewards != null -> {
+                                val customer = showClaimedRewards!!
+                                val claimedRewardsViewModel: ClaimedRewardsViewModel = viewModel {
+                                    ClaimedRewardsViewModel(supabaseApi!!, sessionStorage)
+                                }
+                                
+                                ClaimedRewardsScreen(
+                                    customer = customer,
+                                    viewModel = claimedRewardsViewModel,
+                                    onBack = { showClaimedRewards = null }
+                                )
+                            }
                             selectedCustomer != null -> {
                                 val customerDetailViewModel: CustomerDetailViewModel = viewModel {
                                     CustomerDetailViewModel(supabaseApi!!, sessionStorage, globalDataRefreshManager)
@@ -334,6 +373,7 @@ class MainActivity : ComponentActivity() {
                                     viewModel = customerDetailViewModel,
                                     onBack = { selectedCustomer = null },
                                     onClaimReward = { customer, reward -> showClaims = customer to reward },
+                                    onViewClaimedRewards = { customer -> showClaimedRewards = customer },
                                     nfcManager = nfcManager
                                 )
                             }
@@ -371,6 +411,7 @@ class MainActivity : ComponentActivity() {
                                         viewModel = customerDetailViewModel,
                                         onBack = { showCustomerDetailFromDashboard = null },
                                         onClaimReward = { customerWithPoints, reward -> showClaims = customerWithPoints to reward },
+                                        onViewClaimedRewards = { customerWithPoints -> showClaimedRewards = customerWithPoints },
                                         nfcManager = nfcManager
                                     )
                                 }

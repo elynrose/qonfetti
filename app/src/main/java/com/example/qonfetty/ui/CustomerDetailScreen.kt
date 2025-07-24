@@ -10,6 +10,7 @@ import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -45,6 +46,7 @@ fun CustomerDetailScreen(
     viewModel: CustomerDetailViewModel,
     onBack: () -> Unit,
     onClaimReward: (CustomerWithPoints, com.example.qonfetty.data.Reward) -> Unit,
+    onViewClaimedRewards: (CustomerWithPoints) -> Unit,
     nfcManager: NfcManager?,
     modifier: Modifier = Modifier
 ) {
@@ -184,6 +186,40 @@ fun CustomerDetailScreen(
                                     onClaimReward(customerWithPoints, reward)
                                 }
                             )
+                        }
+                        
+                        // View All Claimed Rewards Section
+                        item {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(16.dp)
+                                ) {
+                                    Text(
+                                        text = "Here are all the rewards claimed by ${customerWithPoints.customer.name}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    
+                                    TextButton(
+                                        onClick = { onViewClaimedRewards(customerWithPoints) },
+                                        modifier = Modifier.align(Alignment.End)
+                                    ) {
+                                        Text("View All")
+                                        Icon(
+                                            Icons.Filled.ArrowForward,
+                                            contentDescription = null,
+                                            modifier = Modifier.padding(start = 4.dp)
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                     

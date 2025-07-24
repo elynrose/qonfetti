@@ -48,6 +48,7 @@ import java.util.UUID
 fun RewardsScreen(
     viewModel: RewardsViewModel,
     onBack: () -> Unit,
+    onAddReward: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -56,7 +57,6 @@ fun RewardsScreen(
     val selectedCategory by viewModel.selectedCategory.collectAsStateWithLifecycle()
     val categories by viewModel.categories.collectAsStateWithLifecycle()
     
-    var showAddDialog by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf<Reward?>(null) }
     var showDeleteDialog by remember { mutableStateOf<Reward?>(null) }
     var selectedImageBytes by remember { mutableStateOf<ByteArray?>(null) }
@@ -118,8 +118,8 @@ fun RewardsScreen(
                     )
                     
                     IconButton(onClick = { 
-                        Log.d("RewardsScreen", "Add button clicked")
-                        showAddDialog = true 
+                        Log.d("RewardsScreen", "Add button clicked, calling onAddReward")
+                        onAddReward()
                     }) {
                         Icon(Icons.Default.Add, contentDescription = "Add Reward")
                     }
@@ -226,12 +226,12 @@ fun RewardsScreen(
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                                            Icon(
-                                Icons.Default.Warning,
-                                contentDescription = "Error",
-                                modifier = Modifier.size(64.dp),
-                                tint = MaterialTheme.colorScheme.error
-                            )
+                                Icon(
+                                    Icons.Default.Warning,
+                                    contentDescription = "Error",
+                                    modifier = Modifier.size(64.dp),
+                                    tint = MaterialTheme.colorScheme.error
+                                )
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Text(
                                     text = (uiState as RewardsUiState.Error).message,
@@ -239,10 +239,6 @@ fun RewardsScreen(
                                     textAlign = TextAlign.Center,
                                     color = MaterialTheme.colorScheme.error
                                 )
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Button(onClick = { viewModel.loadRewards() }) {
-                                    Text("Retry")
-                                }
                             }
                         }
                     }
@@ -258,39 +254,7 @@ fun RewardsScreen(
         }
     }
     
-    // Dialogs
-    if (showAddDialog) {
-        RewardDialog(
-            reward = null,
-            categories = categories,
-            selectedImageBytes = selectedImageBytes,
-            selectedImageFileName = selectedImageFileName,
-            onDismiss = { 
-                showAddDialog = false
-                selectedImageBytes = null
-                selectedImageFileName = null
-            },
-            onSave = { name, description, pointsRequired, photo, price, quantity, category, isShared ->
-                Log.d("RewardsScreen", "Save button clicked with name: $name, points: $pointsRequired, hasImage: ${selectedImageBytes != null}")
-                viewModel.createRewardWithImage(
-                    name = name,
-                    description = description,
-                    pointsRequired = pointsRequired,
-                    imageBytes = selectedImageBytes,
-                    imageFileName = selectedImageFileName,
-                    price = price,
-                    quantity = quantity,
-                    category = category,
-                    isShared = isShared
-                )
-                showAddDialog = false
-                selectedImageBytes = null
-                selectedImageFileName = null
-            },
-            onImageSelect = { imagePickerLauncher.launch("image/*") }
-        )
-    }
-    
+    // Edit Dialog
     showEditDialog?.let { reward ->
         RewardDialog(
             reward = reward,
@@ -314,6 +278,7 @@ fun RewardsScreen(
         )
     }
     
+    // Delete Dialog
     showDeleteDialog?.let { reward ->
         AlertDialog(
             onDismissRequest = { showDeleteDialog = null },
@@ -336,8 +301,6 @@ fun RewardsScreen(
             }
         )
     }
-    
-
 }
 
 @Composable
@@ -348,9 +311,7 @@ private fun CategoryFilter(
 ) {
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 16.dp)
+        modifier = Modifier.padding(bottom = 16.dp)
     ) {
         item {
             FilterChip(
@@ -377,52 +338,53 @@ private fun RewardCard(
     onDelete: () -> Unit
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onEdit() },
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = Color.White
+            containerColor = MaterialTheme.colorScheme.surface
         )
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+            modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Reward image
-            if (reward.photo != null && reward.photo.isNotEmpty()) {
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(reward.photo)
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = "Reward image",
-                    modifier = Modifier
-                        .size(60.dp)
-                        .clip(RoundedCornerShape(8.dp)),
-                    contentScale = ContentScale.Crop
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-            } else {
-                // Placeholder when no image
-                Box(
-                    modifier = Modifier
-                        .size(60.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
-                    contentAlignment = Alignment.Center
+            // Reward photo
+            if (reward.photo != null) {
+                Card(
+                    modifier = Modifier.size(80.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    shape = RoundedCornerShape(8.dp)
                 ) {
-                    Icon(
-                        Icons.Default.Star,
-                        contentDescription = "No image",
-                        modifier = Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    AsyncImage(
+                        model = reward.photo,
+                        contentDescription = "Reward photo",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
                     )
                 }
-                Spacer(modifier = Modifier.width(12.dp))
+            } else {
+                Card(
+                    modifier = Modifier.size(80.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Star,
+                            contentDescription = "No photo",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
+            
+            Spacer(modifier = Modifier.width(16.dp))
             
             // Reward details
             Column(
@@ -435,18 +397,22 @@ private fun RewardCard(
                 )
                 
                 reward.description?.let { description ->
-                    Text(
-                        text = description,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    if (description.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = description,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
                 
+                Spacer(modifier = Modifier.height(8.dp))
+                
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Text(
                         text = "${reward.pointsRequired} points",
@@ -458,43 +424,56 @@ private fun RewardCard(
                         Text(
                             text = "$${String.format("%.2f", price)}",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.secondary
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
                     
                     reward.quantity?.let { quantity ->
                         Text(
-                            text = "$quantity available",
+                            text = "Qty: $quantity",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    
-                    reward.category?.let { category ->
-                        Text(
-                            text = category,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.tertiary
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
                 }
                 
-                if (reward.isShared) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Share,
-                            contentDescription = "Shared",
-                            modifier = Modifier.size(12.dp),
-                            tint = MaterialTheme.colorScheme.tertiary
-                        )
-                        Text(
-                            text = "Shared",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.tertiary
-                        )
+                Spacer(modifier = Modifier.height(4.dp))
+                
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (reward.category != null) {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(
+                                text = reward.category,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                    
+                    if (reward.isShared) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Share,
+                                contentDescription = "Shared",
+                                modifier = Modifier.size(12.dp),
+                                tint = MaterialTheme.colorScheme.tertiary
+                            )
+                            Text(
+                                text = "Shared",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.tertiary
+                            )
+                        }
                     }
                 }
             }
@@ -558,7 +537,8 @@ private fun RewardDialog(
                     onValueChange = { pointsRequired = it },
                     label = { Text("Points Required *") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
                 
                 OutlinedTextField(
@@ -566,7 +546,8 @@ private fun RewardDialog(
                     onValueChange = { price = it },
                     label = { Text("Price ($)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
                 
                 OutlinedTextField(
@@ -574,7 +555,8 @@ private fun RewardDialog(
                     onValueChange = { quantity = it },
                     label = { Text("Quantity") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
                 
                 // Category selection using Button and AlertDialog
@@ -626,43 +608,29 @@ private fun RewardDialog(
                     )
                 }
                 
-                // Image upload section
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                // Photo selection
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
                 ) {
-                    if (selectedImageBytes != null) {
-                        // Show preview of selected image
-                        AsyncImage(
-                            model = ImageRequest.Builder(LocalContext.current)
-                                .data(selectedImageBytes)
-                                .crossfade(true)
-                                .build(),
-                            contentDescription = "Selected image preview",
-                            modifier = Modifier
-                                .size(60.dp)
-                                .clip(RoundedCornerShape(8.dp)),
-                            contentScale = ContentScale.Crop
+                    Column(
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        Text(
+                            text = "Reward Photo",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
                         )
-                    } else if (reward?.photo != null) {
-                        // Show existing image for editing
-                        AsyncImage(
-                            model = ImageRequest.Builder(LocalContext.current)
-                                .data(reward.photo)
-                                .crossfade(true)
-                                .build(),
-                            contentDescription = "Reward image",
-                            modifier = Modifier
-                                .size(60.dp)
-                                .clip(RoundedCornerShape(8.dp)),
-                            contentScale = ContentScale.Crop
-                        )
-                    }
-                    
-                    Button(onClick = onImageSelect) {
-                        Icon(Icons.Default.Add, contentDescription = null)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(if (selectedImageBytes != null || reward?.photo != null) "Change Photo" else "Add Photo")
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Button(onClick = onImageSelect) {
+                            Icon(Icons.Default.Add, contentDescription = null)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(if (selectedImageBytes != null || reward?.photo != null) "Change Photo" else "Add Photo")
+                        }
                     }
                 }
                 
