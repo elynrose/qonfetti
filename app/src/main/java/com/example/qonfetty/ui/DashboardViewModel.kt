@@ -9,6 +9,7 @@ import com.example.qonfetty.data.PointsTransactionWithCustomer
 import com.example.qonfetty.data.TransactionStats
 import com.example.qonfetty.data.DataRefreshManager
 import com.example.qonfetty.data.SessionManager
+import com.example.qonfetty.data.StoreSettings
 import com.example.qonfetty.nfc.NfcManager
 import com.example.qonfetty.nfc.NfcPointsManager
 import com.example.qonfetty.nfc.NfcProcessingResult
@@ -47,6 +48,9 @@ class DashboardViewModel(
     private val _storeInfo = MutableStateFlow<com.example.qonfetty.data.Store?>(null)
     val storeInfo: StateFlow<com.example.qonfetty.data.Store?> = _storeInfo.asStateFlow()
     
+    private val _storeSettings = MutableStateFlow<StoreSettings?>(null)
+    val storeSettings: StateFlow<StoreSettings?> = _storeSettings.asStateFlow()
+    
     private val _refreshState = MutableStateFlow<DataRefreshManager.RefreshState>(DataRefreshManager.RefreshState.Idle)
     val refreshState: StateFlow<DataRefreshManager.RefreshState> = _refreshState.asStateFlow()
     
@@ -54,6 +58,7 @@ class DashboardViewModel(
         loadRecentActivity()
         loadTransactionStats()
         loadStoreInfo()
+        loadStoreSettings()
         
         // Observe live data from DataRefreshManager if available
         dataRefreshManager?.let { manager ->
@@ -336,6 +341,39 @@ class DashboardViewModel(
     }
     
     /**
+     * Load store settings
+     */
+    fun loadStoreSettings() {
+        viewModelScope.launch {
+            try {
+                val authToken = sessionStorage.getAuthToken()
+                val storeId = sessionStorage.getStoreId()
+                
+                if (authToken == null || storeId == null) {
+                    Log.w("DashboardViewModel", "Not authenticated or no store ID, cannot load store settings")
+                    return@launch
+                }
+                
+                val result = supabaseApi.getStoreSettings(storeId, authToken)
+                
+                result.fold(
+                    onSuccess = { settings ->
+                        Log.d("DashboardViewModel", "Successfully loaded store settings: ${settings?.storeName}")
+                        _storeSettings.value = settings
+                    },
+                    onFailure = { exception ->
+                        Log.e("DashboardViewModel", "Failed to load store settings: ${exception.message}", exception)
+                        // Don't treat this as a session expiration error since it might just be no data
+                        Log.w("DashboardViewModel", "Store settings error (might be no data): ${exception.message}")
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e("DashboardViewModel", "Error loading store settings: ${e.message}", e)
+            }
+        }
+    }
+    
+    /**
      * Clear scan history
      */
     fun clearScanHistory() {
@@ -350,6 +388,7 @@ class DashboardViewModel(
         loadRecentActivity()
         loadTransactionStats()
         loadStoreInfo()
+        loadStoreSettings()
     }
 }
 

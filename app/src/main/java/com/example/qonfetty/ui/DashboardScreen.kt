@@ -30,6 +30,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.qonfetty.data.PointsTransaction
 import com.example.qonfetty.data.PointsTransactionWithCustomer
@@ -59,6 +63,7 @@ fun DashboardScreen(
     val lastScanResult by dashboardViewModel.lastScanResult.collectAsStateWithLifecycle()
     val transactionStats by dashboardViewModel.transactionStats.collectAsStateWithLifecycle()
     val storeInfo by dashboardViewModel.storeInfo.collectAsStateWithLifecycle()
+    val storeSettings by dashboardViewModel.storeSettings.collectAsStateWithLifecycle()
     val refreshState by dashboardViewModel.refreshState.collectAsStateWithLifecycle()
     
     // Pull to refresh state
@@ -126,7 +131,7 @@ fun DashboardScreen(
             }
             
             // Store Information Card
-            StoreInfoCard(uiState = uiState, storeInfo = storeInfo)
+            StoreInfoCard(uiState = uiState, storeInfo = storeInfo, storeSettings = storeSettings)
             
             Spacer(modifier = Modifier.height(16.dp))
             
@@ -624,7 +629,8 @@ private fun NfcScanResultCard(
 @Composable
 private fun StoreInfoCard(
     uiState: com.example.qonfetty.ui.AuthUiState,
-    storeInfo: com.example.qonfetty.data.Store?
+    storeInfo: com.example.qonfetty.data.Store?,
+    storeSettings: com.example.qonfetty.data.StoreSettings?
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -660,7 +666,7 @@ private fun StoreInfoCard(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    // Store Logo (using a placeholder icon for now)
+                    // Store Logo
                     Card(
                         modifier = Modifier.size(60.dp),
                         colors = CardDefaults.cardColors(
@@ -672,12 +678,36 @@ private fun StoreInfoCard(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = store.name.take(2).uppercase(),
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
+                            // Show actual logo if available, otherwise show initials
+                            storeSettings?.storeLogo?.let { logoUrl ->
+                                if (logoUrl.isNotEmpty()) {
+                                    AsyncImage(
+                                        model = ImageRequest.Builder(LocalContext.current)
+                                            .data(logoUrl)
+                                            .crossfade(true)
+                                            .build(),
+                                        contentDescription = "Store Logo",
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                } else {
+                                    // Fallback to initials
+                                    Text(
+                                        text = store.name.take(2).uppercase(),
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                            } ?: run {
+                                // No store settings, show initials
+                                Text(
+                                    text = store.name.take(2).uppercase(),
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
                         }
                     }
                     
