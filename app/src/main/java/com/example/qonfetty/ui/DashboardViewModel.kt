@@ -2,8 +2,8 @@ package com.example.qonfetty.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.qonfetty.data.SessionStorage
 import com.example.qonfetty.data.SupabaseApi
+import com.example.qonfetty.data.SessionStorage
 import com.example.qonfetty.data.PointsTransaction
 import com.example.qonfetty.data.PointsTransactionWithCustomer
 import com.example.qonfetty.nfc.NfcManager
@@ -123,28 +123,31 @@ class DashboardViewModel(
                     onSuccess = { processingResult ->
                         _lastScanResult.value = processingResult
                         
-                        // Add to scan history
-                        val newActivity = ScanActivity(
-                            customerName = processingResult.customer.name,
-                            memberId = processingResult.memberId,
-                            pointsAdded = processingResult.pointsAdded,
-                            totalPoints = processingResult.currentPoints,
-                            timestamp = System.currentTimeMillis(),
-                            type = if (processingResult.previousPoints == 0) ScanType.NEW_CUSTOMER else ScanType.EXISTING_CUSTOMER
-                        )
-                        
-                        val currentHistory = _scanHistory.value.toMutableList()
-                        currentHistory.add(0, newActivity) // Add to beginning
-                        if (currentHistory.size > 10) { // Keep only last 10 scans
-                            currentHistory.removeAt(currentHistory.size - 1)
+                        // Only add to scan history if it's a success result
+                        if (processingResult is com.example.qonfetty.nfc.NfcProcessingResult.Success) {
+                            // Add to scan history
+                            val newActivity = ScanActivity(
+                                customerName = processingResult.customer.name,
+                                memberId = processingResult.customer.memberId ?: "Unknown",
+                                pointsAdded = processingResult.pointsAwarded,
+                                totalPoints = processingResult.newTotalPoints,
+                                timestamp = System.currentTimeMillis(),
+                                type = ScanType.EXISTING_CUSTOMER // Default to existing since we don't have previous points
+                            )
+                            
+                            val currentHistory = _scanHistory.value.toMutableList()
+                            currentHistory.add(0, newActivity) // Add to beginning
+                            if (currentHistory.size > 10) { // Keep only last 10 scans
+                                currentHistory.removeAt(currentHistory.size - 1)
+                            }
+                            _scanHistory.value = currentHistory
                         }
-                        _scanHistory.value = currentHistory
                         
                         // Refresh recent activity from database
                         loadRecentActivity()
                         
                         _uiState.value = DashboardUiState.ScanSuccess(processingResult)
-                        Log.d("DashboardViewModel", "NFC scan successful: ${processingResult.customer.name}")
+                        Log.d("DashboardViewModel", "NFC scan successful: ${if (processingResult is com.example.qonfetty.nfc.NfcProcessingResult.Success) processingResult.customer.name else "Error"}")
                     },
                     onFailure = { exception ->
                         val errorMessage = when {

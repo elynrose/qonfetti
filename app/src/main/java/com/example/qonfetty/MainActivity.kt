@@ -149,12 +149,12 @@ class MainActivity : ComponentActivity() {
                                     // Show NFC scan result screen
                                     com.example.qonfetty.ui.NfcScanResultScreen(
                                         result = result,
-                                        onBack = { 
-                                            showNfcScanResult = false
-                                            globalNfcPointsViewModel?.reset()
-                                        },
                                         onClaimReward = { reward ->
                                             globalNfcPointsViewModel?.claimReward(reward)
+                                        },
+                                        onRefresh = {
+                                            // For now, just clear the result
+                                            globalNfcPointsViewModel?.reset()
                                         }
                                     )
                                 }
@@ -365,7 +365,7 @@ class MainActivity : ComponentActivity() {
                     android.util.Log.d("MainActivity", "Calling NFC test callback")
                     globalNfcTestCallback?.invoke(nfcTag)
                 } else {
-                    android.util.Log.d("MainActivity", "Processing NFC tag")
+                    android.util.Log.d("MainActivity", "Processing NFC tag for dashboard")
                     // Process NFC tag with the dashboard ViewModel for automatic handling
                     if (globalDashboardViewModel != null) {
                         android.util.Log.d("MainActivity", "Calling globalDashboardViewModel.processNfcCard")

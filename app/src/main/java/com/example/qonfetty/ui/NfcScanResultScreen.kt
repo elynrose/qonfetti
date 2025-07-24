@@ -19,63 +19,33 @@ import androidx.compose.ui.unit.dp
 import com.example.qonfetty.data.Customer
 import com.example.qonfetty.data.Reward
 import com.example.qonfetty.nfc.NfcProcessingResult
-import com.example.qonfetty.ui.RewardCard
+import androidx.compose.ui.text.style.TextAlign
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun NfcScanResultScreen(
-    result: NfcProcessingResult,
-    onBack: () -> Unit,
-    onClaimReward: (Reward) -> Unit,
+    result: com.example.qonfetty.nfc.NfcProcessingResult,
+    onClaimReward: (com.example.qonfetty.data.Reward) -> Unit,
+    onRefresh: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Pull to refresh state (this screen doesn't need refresh, but we can provide it for consistency)
-    val isRefreshing = false
-    val pullRefreshState = rememberPullRefreshState(
-        refreshing = isRefreshing,
-        onRefresh = { /* NFC scan result screen doesn't need refresh */ }
-    )
-    Column(
-        modifier = modifier.fillMaxSize()
-    ) {
-        // Add top spacing to avoid status bar
-        Spacer(modifier = Modifier.height(48.dp))
-        
-        // Content with proper padding and pull to refresh
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .pullRefresh(pullRefreshState)
-        ) {
-            Column(
-                modifier = Modifier
+    when (result) {
+        is com.example.qonfetty.nfc.NfcProcessingResult.Success -> {
+            val isRefreshing = false
+            val pullRefreshState = rememberPullRefreshState(
+                refreshing = isRefreshing,
+                onRefresh = onRefresh
+            )
+            
+            Box(
+                modifier = modifier
                     .fillMaxSize()
-                    .padding(horizontal = 16.dp)
+                    .pullRefresh(pullRefreshState)
             ) {
-                // Header
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                    
-                    Text(
-                        text = "NFC Scan Result",
-                        style = MaterialTheme.typography.headlineMedium
-                    )
-                    
-                    Spacer(modifier = Modifier.width(48.dp)) // Balance the header
-                }
-                
-                // Content
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 16.dp),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     // Customer Info Card
@@ -139,14 +109,54 @@ fun NfcScanResultScreen(
                         }
                     }
                 }
+                
+                // Pull to refresh indicator
+                PullRefreshIndicator(
+                    refreshing = isRefreshing,
+                    state = pullRefreshState,
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
             }
-            
-            // Pull to refresh indicator
-            PullRefreshIndicator(
-                refreshing = isRefreshing,
-                state = pullRefreshState,
-                modifier = Modifier.align(Alignment.TopCenter)
-            )
+        }
+        is com.example.qonfetty.nfc.NfcProcessingResult.Error -> {
+            // Show error state
+            Box(
+                modifier = modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Card(
+                    modifier = Modifier.padding(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            Icons.Default.Warning,
+                            contentDescription = "Error",
+                            modifier = Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Error",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = result.message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -247,90 +257,113 @@ fun CustomerInfoCard(customer: Customer) {
 }
 
 @Composable
-fun PointsUpdateCard(result: NfcProcessingResult) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    Icons.Default.Star,
-                    contentDescription = "Points",
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-                Text(
-                    text = "Points Updated",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            }
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            Row(
+fun PointsUpdateCard(result: com.example.qonfetty.nfc.NfcProcessingResult) {
+    when (result) {
+        is com.example.qonfetty.nfc.NfcProcessingResult.Success -> {
+            Card(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                )
             ) {
-                Column {
-                    Text(
-                        text = "Previous Points",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                    )
-                    Text(
-                        text = "${result.previousPoints}",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Star,
+                            contentDescription = "Points",
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Text(
+                            text = "Points Updated",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "Previous Points",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                            )
+                            Text(
+                                text = "${result.newTotalPoints - result.pointsAwarded}",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                        
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = "Added",
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        
+                        Column {
+                            Text(
+                                text = "Points Added",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                            )
+                            Text(
+                                text = "+${result.pointsAwarded}",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                        
+                        Icon(
+                            Icons.Default.ArrowForward,
+                            contentDescription = "Equals",
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        
+                        Column {
+                            Text(
+                                text = "Current Points",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                            )
+                            Text(
+                                text = "${result.newTotalPoints}",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
                 }
-                
-                Icon(
-                    Icons.Default.Add,
-                    contentDescription = "Added",
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+            }
+        }
+        is com.example.qonfetty.nfc.NfcProcessingResult.Error -> {
+            // Show error state
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
                 )
-                
-                Column {
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
                     Text(
-                        text = "Points Added",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                    )
-                    Text(
-                        text = "+${result.pointsAdded}",
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
-                
-                Icon(
-                    Icons.Default.ArrowForward,
-                    contentDescription = "Equals",
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-                
-                Column {
-                    Text(
-                        text = "Current Points",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                    )
-                    Text(
-                        text = "${result.currentPoints}",
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        text = "Error: ${result.message}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onErrorContainer
                     )
                 }
             }

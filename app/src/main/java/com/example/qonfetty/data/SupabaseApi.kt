@@ -1209,9 +1209,17 @@ class SupabaseApi(private val environmentConfig: EnvironmentConfig) {
             }
             
             if (response.status.isSuccess()) {
-                val storeId = response.body<String>()
-                Log.d("SupabaseApi", "Current store ID: $storeId")
-                storeId
+                val responseBody = response.body<String>()
+                Log.d("SupabaseApi", "Raw response from get_or_create_store: $responseBody")
+                
+                // Check if the response looks like a UUID
+                if (responseBody != null && responseBody.matches(Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", RegexOption.IGNORE_CASE))) {
+                    Log.d("SupabaseApi", "Current store ID: $responseBody")
+                    responseBody
+                } else {
+                    Log.e("SupabaseApi", "Invalid store ID format: $responseBody")
+                    null
+                }
             } else {
                 Log.e("SupabaseApi", "Failed to get current store ID: ${response.status}")
                 null

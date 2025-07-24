@@ -43,7 +43,11 @@ class NfcPointsViewModel(
                     onSuccess = { processingResult ->
                         _scanResult.value = processingResult
                         _uiState.value = NfcPointsUiState.Success(processingResult)
-                        Log.d("NfcPointsViewModel", "NFC processing successful: ${processingResult.customer.name}")
+                        if (processingResult is com.example.qonfetty.nfc.NfcProcessingResult.Success) {
+                            Log.d("NfcPointsViewModel", "NFC processing successful: ${processingResult.customer.name}")
+                        } else {
+                            Log.d("NfcPointsViewModel", "NFC processing successful but with error result")
+                        }
                     },
                     onFailure = { exception ->
                         _uiState.value = NfcPointsUiState.Error(exception.message ?: "Failed to process NFC card")
@@ -74,8 +78,8 @@ class NfcPointsViewModel(
                 }
                 
                 val currentResult = _scanResult.value
-                if (currentResult == null) {
-                    _uiState.value = NfcPointsUiState.Error("No scan result available")
+                if (currentResult == null || currentResult !is com.example.qonfetty.nfc.NfcProcessingResult.Success) {
+                    _uiState.value = NfcPointsUiState.Error("No valid scan result available")
                     return@launch
                 }
                 
@@ -94,7 +98,14 @@ class NfcPointsViewModel(
                         
                         // Update the scan result to remove the claimed reward
                         val updatedRewards = currentResult.claimableRewards.filter { it.id != reward.id }
-                        val updatedResult = currentResult.copy(claimableRewards = updatedRewards)
+                        // Create a new NfcProcessingResult.Success with updated rewards
+                        val updatedResult = com.example.qonfetty.nfc.NfcProcessingResult.Success(
+                            customer = currentResult.customer,
+                            pointsAwarded = currentResult.pointsAwarded,
+                            newTotalPoints = currentResult.newTotalPoints,
+                            claimableRewards = updatedRewards,
+                            nfcCardId = currentResult.nfcCardId
+                        )
                         _scanResult.value = updatedResult
                     },
                     onFailure = { exception ->
