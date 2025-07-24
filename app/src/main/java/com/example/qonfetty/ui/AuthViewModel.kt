@@ -51,7 +51,7 @@ class AuthViewModel(
                                     store?.let { 
                                         sessionStorage.saveStoreId(it.id)
                                     }
-                                    _uiState.value = AuthUiState.Success("Login successful")
+                                    _uiState.value = AuthUiState.Success("")
                                     _isLoggedIn.value = true
                                 }
                                 .onFailure { error ->
@@ -81,7 +81,7 @@ class AuthViewModel(
                     authResponse.user?.let { user ->
                         sessionStorage.saveUserId(user.id)
                         
-                        _uiState.value = AuthUiState.Success("Registration successful")
+                        _uiState.value = AuthUiState.Success("")
                         _isLoggedIn.value = true
                     }
                 }

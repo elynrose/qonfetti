@@ -732,33 +732,7 @@ private fun StoreInfoCard(
                 Spacer(modifier = Modifier.height(16.dp))
             }
             
-            Text(
-                text = "You are successfully logged in to your store management dashboard.",
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-            
-            Text(
-                text = "Your store ID and authentication tokens have been securely stored.",
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
-            
-            // Success message if any
-            if (uiState is com.example.qonfetty.ui.AuthUiState.Success) {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = uiState.message,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.padding(12.dp)
-                    )
-                }
-            }
+
         }
     }
 }
