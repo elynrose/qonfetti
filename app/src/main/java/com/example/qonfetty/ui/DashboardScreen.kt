@@ -780,17 +780,18 @@ private fun StoreInfoCard(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
                     )
                 ) {
                     Column(
-                        modifier = Modifier.padding(12.dp)
+                        modifier = Modifier.padding(16.dp)
                     ) {
                         // Time Range Section
                         Text(
                             text = "Time Range",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
                         
@@ -807,7 +808,7 @@ private fun StoreInfoCard(
                                 Icon(
                                     imageVector = Icons.Filled.ArrowBack,
                                     contentDescription = "Previous week",
-                                    tint = MaterialTheme.colorScheme.primary
+                                    tint = MaterialTheme.colorScheme.onTertiaryContainer
                                 )
                             }
                             
@@ -817,6 +818,7 @@ private fun StoreInfoCard(
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium,
                                 textAlign = TextAlign.Center,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer,
                                 modifier = Modifier.weight(1f)
                             )
                             
@@ -828,7 +830,7 @@ private fun StoreInfoCard(
                                 Icon(
                                     imageVector = Icons.Filled.ArrowForward,
                                     contentDescription = "Next week",
-                                    tint = MaterialTheme.colorScheme.primary
+                                    tint = MaterialTheme.colorScheme.onTertiaryContainer
                                 )
                             }
                         }
@@ -848,18 +850,18 @@ private fun StoreInfoCard(
                                     imageVector = Icons.Filled.DateRange,
                                     contentDescription = null,
                                     modifier = Modifier.size(48.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    tint = MaterialTheme.colorScheme.onTertiaryContainer
                                 )
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Text(
                                     text = "No data for this time period",
                                     style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer
                                 )
                                 Text(
                                     text = "Try a different time range or add some transactions",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
                                 )
                             }
                         } else {
