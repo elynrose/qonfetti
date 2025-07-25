@@ -35,6 +35,7 @@ import com.example.qonfetty.ui.theme.StatusBarSpacer
 import java.text.SimpleDateFormat
 import java.util.*
 import android.util.Log
+import com.example.qonfetty.ui.UnregisteredCardDialog
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
@@ -231,6 +232,25 @@ fun DashboardScreen(
                             ) {
                                 Text("No, Don't Award")
                             }
+                        }
+                    )
+                }
+            }
+            else -> {}
+        }
+        
+        // Unregistered Card Dialog
+        when (val state = dashboardState) {
+            is DashboardUiState.ScanConfirmation -> {
+                val result = state.result
+                if (result is com.example.qonfetty.nfc.NfcProcessingResult.UnregisteredCard) {
+                    UnregisteredCardDialog(
+                        memberId = result.memberId,
+                        onAccept = {
+                            dashboardViewModel.registerUnregisteredCard(result.memberId)
+                        },
+                        onDecline = {
+                            dashboardViewModel.clearScanResult()
                         }
                     )
                 }
@@ -585,6 +605,64 @@ private fun NfcScanResultCard(
                             }
                         }
                     }
+                }
+            }
+        }
+        is com.example.qonfetty.nfc.NfcProcessingResult.UnregisteredCard -> {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Warning,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Text(
+                                text = "Unregistered Card",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        IconButton(onClick = onDismiss) {
+                            Icon(
+                                imageVector = Icons.Filled.Close,
+                                contentDescription = "Dismiss",
+                                tint = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Text(
+                        text = "Card ID: ${result.memberId}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Text(
+                        text = "This card is not registered with this store. Please contact the store owner to register your card.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
                 }
             }
         }

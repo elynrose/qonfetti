@@ -61,6 +61,7 @@ class DashboardViewModel(
     val refreshState: StateFlow<DataRefreshManager.RefreshState> = _refreshState.asStateFlow()
     
     init {
+        // Initial data load
         loadRecentActivity()
         loadTransactionStats()
         loadStoreInfo()
@@ -94,6 +95,54 @@ class DashboardViewModel(
                 }
             }
         }
+        
+        // Observe session manager for login state changes
+        sessionManager?.let { manager ->
+            viewModelScope.launch {
+                manager.isLoggedIn.collect { isLoggedIn ->
+                    if (isLoggedIn) {
+                        Log.d("DashboardViewModel", "User logged in, refreshing dashboard data")
+                        refreshDashboardData()
+                    } else {
+                        Log.d("DashboardViewModel", "User logged out, clearing dashboard data")
+                        clearDashboardData()
+                    }
+                }
+            }
+        }
+    }
+    
+    /**
+     * Refresh all dashboard data when user switches accounts
+     */
+    private fun refreshDashboardData() {
+        Log.d("DashboardViewModel", "Refreshing dashboard data for new user")
+        // Reset promotional mode and weeks back to defaults
+        _promotionalMode.value = false
+        _weeksBack.value = 1
+        // Clear scan history for new user
+        _scanHistory.value = emptyList()
+        // Load fresh data
+        loadRecentActivity()
+        loadTransactionStats()
+        loadStoreInfo()
+        loadStoreSettings()
+    }
+    
+    /**
+     * Clear dashboard data when user logs out
+     */
+    private fun clearDashboardData() {
+        Log.d("DashboardViewModel", "Clearing dashboard data")
+        _recentActivity.value = emptyList()
+        _transactionStats.value = null
+        _storeInfo.value = null
+        _storeSettings.value = null
+        _promotionalMode.value = false
+        _weeksBack.value = 1
+        _scanHistory.value = emptyList()
+        _lastScanResult.value = null
+        _uiState.value = DashboardUiState.Idle
     }
     
     /**
@@ -179,9 +228,23 @@ class DashboardViewModel(
                 
                 result.fold(
                     onSuccess = { processingResult ->
-                        _lastScanResult.value = processingResult
-                        _uiState.value = DashboardUiState.ScanConfirmation(processingResult)
-                        Log.d("DashboardViewModel", "NFC scan ready for confirmation: ${if (processingResult is com.example.qonfetty.nfc.NfcProcessingResult.Success) processingResult.customer.name else "Error"}")
+                        when (processingResult) {
+                            is com.example.qonfetty.nfc.NfcProcessingResult.Success -> {
+                                _lastScanResult.value = processingResult
+                                _uiState.value = DashboardUiState.ScanConfirmation(processingResult)
+                                Log.d("DashboardViewModel", "NFC scan ready for confirmation: ${processingResult.customer.name}")
+                            }
+                            is com.example.qonfetty.nfc.NfcProcessingResult.UnregisteredCard -> {
+                                // Don't set _lastScanResult for unregistered cards
+                                // The dialog will be shown based on the UI state
+                                _uiState.value = DashboardUiState.ScanConfirmation(processingResult)
+                                Log.d("DashboardViewModel", "Unregistered card detected: ${processingResult.memberId}")
+                            }
+                            is com.example.qonfetty.nfc.NfcProcessingResult.Error -> {
+                                _uiState.value = DashboardUiState.ScanError(processingResult.message)
+                                Log.e("DashboardViewModel", "NFC processing error: ${processingResult.message}")
+                            }
+                        }
                     },
                     onFailure = { exception ->
                         val errorMessage = when {
@@ -484,6 +547,51 @@ class DashboardViewModel(
             3 -> "14-21 Days Ago"
             4 -> "21-28 Days Ago"
             else -> "${(weeks - 1) * 7}-${weeks * 7} Days Ago"
+        }
+    }
+
+    /**
+     * Register an unregistered card with user permission
+     */
+    fun registerUnregisteredCard(memberId: String) {
+        viewModelScope.launch {
+            _uiState.value = DashboardUiState.Scanning
+            
+            try {
+                val result = nfcPointsManager.registerUnregisteredCard(memberId, _promotionalMode.value)
+                
+                result.fold(
+                    onSuccess = { processingResult ->
+                        when (processingResult) {
+                            is NfcProcessingResult.Success -> {
+                                _lastScanResult.value = processingResult
+                                _uiState.value = DashboardUiState.ScanSuccess(processingResult)
+                                Log.d("DashboardViewModel", "Successfully registered card and awarded points to: ${processingResult.customer.name}")
+                            }
+                            is NfcProcessingResult.UnregisteredCard -> {
+                                _uiState.value = DashboardUiState.ScanError("Failed to register card. Please try again.")
+                                Log.e("DashboardViewModel", "Card registration failed - still unregistered")
+                            }
+                            is NfcProcessingResult.Error -> {
+                                _uiState.value = DashboardUiState.ScanError(processingResult.message)
+                                Log.e("DashboardViewModel", "Card registration error: ${processingResult.message}")
+                            }
+                        }
+                    },
+                    onFailure = { exception ->
+                        val errorMessage = when {
+                            exception.message?.contains("401") == true -> "Session expired. Please log in again."
+                            exception.message?.contains("403") == true -> "Access denied. Please check your permissions."
+                            else -> exception.message ?: "Failed to register card"
+                        }
+                        _uiState.value = DashboardUiState.ScanError(errorMessage)
+                        Log.e("DashboardViewModel", "Card registration failed: ${exception.message}", exception)
+                    }
+                )
+            } catch (e: Exception) {
+                _uiState.value = DashboardUiState.ScanError(e.message ?: "Unknown error occurred")
+                Log.e("DashboardViewModel", "Error registering card: ${e.message}", e)
+            }
         }
     }
 }

@@ -173,8 +173,11 @@ class MainActivity : FragmentActivity() {
                             
                             // Start/stop data refresh based on login status
                             if (isLoggedIn) {
+                                globalDataRefreshManager?.clearCachedData()
                                 globalDataRefreshManager?.startPeriodicRefresh()
-                                Log.d("MainActivity", "Started periodic data refresh")
+                                // Reset global ViewModels for new user
+                                globalNfcPointsViewModel?.resetForNewUser()
+                                Log.d("MainActivity", "Started periodic data refresh and reset ViewModels for new user")
                             } else {
                                 globalDataRefreshManager?.stopPeriodicRefresh()
                                 Log.d("MainActivity", "Stopped periodic data refresh")

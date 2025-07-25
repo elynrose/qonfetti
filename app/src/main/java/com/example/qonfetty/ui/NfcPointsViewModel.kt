@@ -29,6 +29,19 @@ class NfcPointsViewModel(
     private val _scanResult = MutableStateFlow<NfcProcessingResult?>(null)
     val scanResult: StateFlow<NfcProcessingResult?> = _scanResult.asStateFlow()
     
+    init {
+        // Reset state when ViewModel is created
+        reset()
+    }
+    
+    /**
+     * Reset the ViewModel state when user switches accounts
+     */
+    fun resetForNewUser() {
+        Log.d("NfcPointsViewModel", "Resetting ViewModel state for new user")
+        reset()
+    }
+    
     /**
      * Process NFC card and handle points/rewards
      */

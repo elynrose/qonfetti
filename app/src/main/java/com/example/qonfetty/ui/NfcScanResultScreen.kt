@@ -118,6 +118,54 @@ fun NfcScanResultScreen(
                 )
             }
         }
+        is com.example.qonfetty.nfc.NfcProcessingResult.UnregisteredCard -> {
+            // Show unregistered card state
+            Box(
+                modifier = modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            Icons.Default.Warning,
+                            contentDescription = "Unregistered Card",
+                            modifier = Modifier.size(64.dp),
+                            tint = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Unregistered Card",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Card ID: ${result.memberId}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "This card is not registered with this store. Please contact the store owner to register your card.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            }
+        }
         is com.example.qonfetty.nfc.NfcProcessingResult.Error -> {
             // Show error state
             Box(
@@ -348,6 +396,10 @@ fun PointsUpdateCard(result: com.example.qonfetty.nfc.NfcProcessingResult) {
                     }
                 }
             }
+        }
+        is com.example.qonfetty.nfc.NfcProcessingResult.UnregisteredCard -> {
+            // Don't show anything for unregistered cards in this context
+            // The main screen will handle the unregistered card display
         }
         is com.example.qonfetty.nfc.NfcProcessingResult.Error -> {
             // Show error state

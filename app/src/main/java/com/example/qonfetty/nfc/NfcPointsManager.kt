@@ -49,8 +49,8 @@ class NfcPointsManager(
             // Find customer by member ID
             val customer = findCustomerByMemberId(memberId)
             if (customer == null) {
-                Log.e("NfcPointsManager", "Customer not found for member ID: $memberId")
-                return Result.failure(Exception("Customer not found. Please register this customer first."))
+                Log.d("NfcPointsManager", "Customer not found for member ID: $memberId - card needs registration")
+                return Result.success(NfcProcessingResult.UnregisteredCard(memberId, memberId))
             }
             
             Log.d("NfcPointsManager", "Found customer: ${customer.name}")
@@ -58,8 +58,8 @@ class NfcPointsManager(
             // Look up NFC card
             val nfcCard = findNfcCard(memberId)
             if (nfcCard == null) {
-                Log.e("NfcPointsManager", "NFC card not found for member ID: $memberId")
-                return Result.failure(Exception("NFC card not registered. Please register this card first."))
+                Log.d("NfcPointsManager", "NFC card not found for member ID: $memberId - card needs registration")
+                return Result.success(NfcProcessingResult.UnregisteredCard(memberId, memberId))
             }
             
             Log.d("NfcPointsManager", "Found NFC card: ${nfcCard.cardId}")
@@ -445,6 +445,98 @@ class NfcPointsManager(
             return null
         }
     }
+
+    /**
+     * Register an unregistered card with user permission
+     */
+    suspend fun registerUnregisteredCard(memberId: String, promotionalMode: Boolean = false): Result<NfcProcessingResult> {
+        return try {
+            Log.d("NfcPointsManager", "Registering unregistered card with member ID: $memberId")
+            
+            val authToken = sessionStorage.getAuthToken()
+            if (authToken == null) {
+                Log.e("NfcPointsManager", "Not authenticated")
+                return Result.failure(Exception("Not authenticated. Please login again."))
+            }
+            
+            val storeId = sessionStorage.getStoreId()
+            if (storeId == null) {
+                Log.e("NfcPointsManager", "No store ID available")
+                return Result.failure(Exception("Store not found. Please login again."))
+            }
+            
+            // First, try to find the customer by member ID
+            val customer = findCustomerByMemberId(memberId)
+            if (customer == null) {
+                Log.e("NfcPointsManager", "Customer not found for member ID: $memberId")
+                return Result.failure(Exception("Customer not found. Please register this customer first."))
+            }
+            
+            // Check if the customer is already associated with this store
+            val existingPoints = supabaseApi.getCustomerPoints(customer.id!!, storeId, authToken).getOrNull()
+            if (existingPoints == null) {
+                // Customer is not associated with this store, add them
+                Log.d("NfcPointsManager", "Adding customer ${customer.name} to store $storeId")
+                val addCustomerResult = supabaseApi.addCustomerToStore(customer.id!!, storeId, authToken)
+                addCustomerResult.fold(
+                    onSuccess = {
+                        Log.d("NfcPointsManager", "Successfully added customer to store")
+                    },
+                    onFailure = { exception ->
+                        Log.e("NfcPointsManager", "Failed to add customer to store: ${exception.message}")
+                        return Result.failure(Exception("Failed to add customer to store: ${exception.message}"))
+                    }
+                )
+            }
+            
+            // Now register the NFC card using the existing method
+            val registerCardResult = registerNfcCardIfNeeded(memberId, memberId, customer.id!!, authToken)
+            registerCardResult.fold(
+                onSuccess = { nfcCard ->
+                    Log.d("NfcPointsManager", "Successfully registered NFC card: ${nfcCard.cardId}")
+                    
+                    // Now process the card normally by creating a mock tag
+                    // Since we can't create a real tag, we'll simulate the processing
+                    val storeSettingsResult = supabaseApi.getStoreSettings(storeId, authToken)
+                    val storeSettings = storeSettingsResult.getOrNull()
+                    val pointsPerPurchase = if (promotionalMode && storeSettings?.promotionalEnabled == true) {
+                        storeSettings.promotionPointsPerPurchase
+                    } else {
+                        storeSettings?.pointsPerPurchase ?: 1
+                    }
+                    
+                    // Get current customer points (should be 0 since we just added them)
+                    val currentPoints = 0
+                    
+                    // Get claimable rewards for the points they would have after award
+                    val rewards = supabaseApi.getClaimableRewards(
+                        storeId = storeId,
+                        currentPoints = currentPoints + pointsPerPurchase,
+                        authToken = authToken
+                    ).getOrNull() ?: emptyList()
+                    
+                    // Create success result
+                    val successResult = NfcProcessingResult.Success(
+                        customer = customer,
+                        pointsAwarded = pointsPerPurchase,
+                        newTotalPoints = currentPoints + pointsPerPurchase,
+                        claimableRewards = rewards,
+                        nfcCardId = nfcCard.cardId
+                    )
+                    
+                    // Award points to the newly registered customer
+                    awardPointsToCustomer(successResult)
+                },
+                onFailure = { exception ->
+                    Log.e("NfcPointsManager", "Failed to register NFC card: ${exception.message}")
+                    Result.failure(Exception("Failed to register NFC card: ${exception.message}"))
+                }
+            )
+        } catch (e: Exception) {
+            Log.e("NfcPointsManager", "Error registering unregistered card: ${e.message}", e)
+            Result.failure(Exception("Error registering unregistered card: ${e.message}"))
+        }
+    }
 }
 
 /**
@@ -457,6 +549,11 @@ sealed class NfcProcessingResult {
         val newTotalPoints: Int,
         val claimableRewards: List<Reward>,
         val nfcCardId: String
+    ) : NfcProcessingResult()
+
+    data class UnregisteredCard(
+        val memberId: String,
+        val cardId: String
     ) : NfcProcessingResult()
 
     data class Error(val message: String) : NfcProcessingResult()

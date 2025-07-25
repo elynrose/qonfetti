@@ -115,6 +115,19 @@ class DataRefreshManager(
     }
     
     /**
+     * Clear all cached data when user switches accounts
+     */
+    fun clearCachedData() {
+        Log.d("DataRefreshManager", "Clearing cached data for new user")
+        _customersData.value = emptyList()
+        _recentActivityData.value = emptyList()
+        _customerPointsData.value = emptyMap()
+        _rewardsData.value = emptyList()
+        _transactionStatsData.value = null
+        _refreshState.value = RefreshState.Idle
+    }
+    
+    /**
      * Manually refresh all data
      */
     suspend fun refreshAllData() {

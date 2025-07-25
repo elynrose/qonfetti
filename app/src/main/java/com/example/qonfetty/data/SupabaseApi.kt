@@ -904,6 +904,49 @@ class SupabaseApi(private val environmentConfig: EnvironmentConfig) {
     }
     
     /**
+     * Add customer to store (create customer_points record with 0 points)
+     */
+    suspend fun addCustomerToStore(customerId: String, storeId: String, authToken: String): Result<CustomerPoints> {
+        return try {
+            Log.d("SupabaseApi", "Adding customer $customerId to store $storeId")
+            
+            // Create a customer_points record with 0 points to associate customer with store
+            val pointsRecord = CustomerPoints(
+                customerId = customerId,
+                storeId = storeId,
+                points = 0
+            )
+            
+            val response = client.post("$baseUrl/rest/v1/customer_points") {
+                contentType(ContentType.Application.Json)
+                headers {
+                    append("apikey", anonKey)
+                    append("Authorization", "Bearer $authToken")
+                }
+                setBody(pointsRecord)
+            }
+            
+            if (response.status.isSuccess()) {
+                // For 201 Created responses, Supabase might not return a response body
+                // So we'll create the CustomerPoints object ourselves
+                val createdPoints = CustomerPoints(
+                    customerId = customerId,
+                    storeId = storeId,
+                    points = 0
+                )
+                Log.d("SupabaseApi", "Successfully added customer to store with ${createdPoints.points} points")
+                Result.success(createdPoints)
+            } else {
+                Log.e("SupabaseApi", "Failed to add customer to store: ${response.status}")
+                Result.failure(Exception("Failed to add customer to store: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            Log.e("SupabaseApi", "Error adding customer to store: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
      * Update existing customer points
      */
     suspend fun updateCustomerPoints(customerId: String, storeId: String, newPoints: Int, authToken: String): Result<CustomerPoints> {
