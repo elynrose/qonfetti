@@ -159,9 +159,11 @@ fun TransactionsScreen(
 private fun TransactionItem(transaction: PointsTransactionWithCustomer) {
     // Multiple date formats to try
     val dateFormats = listOf(
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXX", Locale.getDefault()),
         SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'", Locale.getDefault()),
-        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.getDefault()),
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXX", Locale.getDefault()),
         SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault()),
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.getDefault()),
         SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
     )
     val displayFormat = SimpleDateFormat("MMM dd, yyyy 'at' h:mm a", Locale.getDefault())
@@ -169,6 +171,9 @@ private fun TransactionItem(transaction: PointsTransactionWithCustomer) {
     // Parse the createdAt string to a Date object
     val displayDate = try {
         transaction.createdAt?.let { dateString ->
+            // Debug: Log the actual date string
+            android.util.Log.d("TransactionsScreen", "Raw date string: $dateString")
+            
             var parsedDate: Date? = null
             var lastException: Exception? = null
             
@@ -176,22 +181,28 @@ private fun TransactionItem(transaction: PointsTransactionWithCustomer) {
             for (format in dateFormats) {
                 try {
                     parsedDate = format.parse(dateString)
+                    android.util.Log.d("TransactionsScreen", "Successfully parsed with format: ${format.toPattern()}")
                     break
                 } catch (e: Exception) {
                     lastException = e
+                    android.util.Log.d("TransactionsScreen", "Failed to parse with format ${format.toPattern()}: ${e.message}")
                     continue
                 }
             }
             
             if (parsedDate != null) {
-                displayFormat.format(parsedDate)
+                val formatted = displayFormat.format(parsedDate)
+                android.util.Log.d("TransactionsScreen", "Formatted date: $formatted")
+                formatted
             } else {
                 // If all parsing failed, try to format the raw string in a readable way
+                android.util.Log.d("TransactionsScreen", "All parsing failed, using fallback")
                 "Recent activity"
             }
         } ?: "Unknown date"
     } catch (e: Exception) {
         // Final fallback
+        android.util.Log.e("TransactionsScreen", "Date parsing error", e)
         "Recent activity"
     }
     

@@ -6,7 +6,7 @@ import android.nfc.NfcAdapter
 import android.nfc.Tag
 import android.os.Bundle
 import android.util.Log
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
@@ -52,8 +52,9 @@ import com.example.qonfetty.ui.ClaimedRewardsViewModel
 import com.example.qonfetty.ui.AddRewardsScreen
 import com.example.qonfetty.ui.AddRewardsViewModel
 import com.example.qonfetty.ui.TransactionsScreen
+import com.example.qonfetty.util.BiometricAuthManager
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     
     private var nfcManager: NfcManager? = null
     private var nfcAdapter: NfcAdapter? = null
@@ -148,8 +149,9 @@ class MainActivity : ComponentActivity() {
                     }
                     
                     if (supabaseApi != null && globalSessionManager != null) {
+                        val biometricAuthManager = remember { BiometricAuthManager(this) }
                         val viewModel: AuthViewModel = viewModel {
-                            AuthViewModel(supabaseApi!!, sessionStorage)
+                            AuthViewModel(supabaseApi!!, sessionStorage, biometricAuthManager)
                         }
                         
                         val isLoggedIn by viewModel.isLoggedIn.collectAsStateWithLifecycle()

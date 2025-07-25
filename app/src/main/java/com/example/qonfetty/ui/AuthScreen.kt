@@ -18,6 +18,12 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.ContentScale
 import com.example.qonfetty.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.ui.platform.LocalContext
+import androidx.fragment.app.FragmentActivity
+import android.widget.Toast
+import android.util.Log
 
 @Composable
 fun AuthScreen(
@@ -27,6 +33,8 @@ fun AuthScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val isLoggedIn by viewModel.isLoggedIn.collectAsStateWithLifecycle()
+    val isBiometricAvailable by viewModel.isBiometricAvailable.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     
     var currentScreen by remember { mutableStateOf(AuthScreenType.Login) }
     var email by remember { mutableStateOf("") }
@@ -231,6 +239,39 @@ fun AuthScreen(
                     AuthScreenType.Register -> "Register"
                     AuthScreenType.ForgotPassword -> "Send Reset Email"
                 }
+            )
+        }
+        
+        // Show fingerprint button only on login screen and if biometrics are available
+        if (currentScreen == AuthScreenType.Login && isBiometricAvailable) {
+            IconButton(
+                onClick = {
+                    Log.d("AuthScreen", "Padlock (biometric) button clicked")
+                    // Cast context to FragmentActivity for biometric prompt
+                    val activity = context as? FragmentActivity
+                    if (activity != null) {
+                        viewModel.loginWithBiometric(activity)
+                    } else {
+                        Toast.makeText(context, "Biometric login not supported on this screen.", Toast.LENGTH_LONG).show()
+                        Log.e("AuthScreen", "Context is not a FragmentActivity: biometric login cannot start.")
+                    }
+                },
+                modifier = Modifier
+                    .size(56.dp)
+                    .padding(bottom = 8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Lock,
+                    contentDescription = "Login with Fingerprint",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(40.dp)
+                )
+            }
+            Text(
+                text = "Login with Fingerprint",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(bottom = 16.dp)
             )
         }
         

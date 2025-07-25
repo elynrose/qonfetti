@@ -53,9 +53,27 @@ class SessionStorage(context: Context) {
         getAuthToken() != null
     }
     
+    suspend fun saveCredentials(email: String, password: String) = withContext(Dispatchers.IO) {
+        encryptedPrefs.edit().putString(KEY_EMAIL, email).putString(KEY_PASSWORD, password).apply()
+    }
+
+    suspend fun getStoredEmail(): String? = withContext(Dispatchers.IO) {
+        encryptedPrefs.getString(KEY_EMAIL, null)
+    }
+
+    suspend fun getStoredPassword(): String? = withContext(Dispatchers.IO) {
+        encryptedPrefs.getString(KEY_PASSWORD, null)
+    }
+
+    suspend fun clearCredentials() = withContext(Dispatchers.IO) {
+        encryptedPrefs.edit().remove(KEY_EMAIL).remove(KEY_PASSWORD).apply()
+    }
+
     companion object {
         private const val KEY_AUTH_TOKEN = "auth_token"
         private const val KEY_STORE_ID = "store_id"
         private const val KEY_USER_ID = "user_id"
+        private const val KEY_EMAIL = "email"
+        private const val KEY_PASSWORD = "password"
     }
 } 

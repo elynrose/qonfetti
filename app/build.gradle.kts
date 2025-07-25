@@ -72,6 +72,10 @@ dependencies {
     // Security for session storage
     implementation(libs.androidx.security.crypto)
     
+    // Biometric authentication
+    implementation("androidx.biometric:biometric:1.1.0")
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    
     testImplementation(libs.junit)
     testImplementation(libs.mockito.kotlin)
     testImplementation(libs.kotlinx.coroutines.test)

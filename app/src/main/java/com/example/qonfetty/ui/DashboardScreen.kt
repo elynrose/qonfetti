@@ -295,7 +295,7 @@ private fun DashboardHeader(
                         )
                         
                         Icon(
-                            imageVector = Icons.Filled.Star,
+                            imageVector = Icons.Filled.Info,
                             contentDescription = "Scanning NFC",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(32.dp)
@@ -303,7 +303,7 @@ private fun DashboardHeader(
                     }
                     is DashboardUiState.ScanConfirmation -> {
                         Icon(
-                            imageVector = Icons.Filled.Star,
+                            imageVector = Icons.Filled.Info,
                             contentDescription = "Awaiting confirmation",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(32.dp)
@@ -327,7 +327,7 @@ private fun DashboardHeader(
                     }
                     else -> {
                         Icon(
-                            imageVector = Icons.Filled.Star,
+                            imageVector = Icons.Filled.Info,
                             contentDescription = "Ready for NFC",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(32.dp)

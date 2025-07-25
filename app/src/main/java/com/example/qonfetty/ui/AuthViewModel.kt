@@ -4,15 +4,18 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.qonfetty.data.SessionStorage
 import com.example.qonfetty.data.SupabaseApi
+import com.example.qonfetty.util.BiometricAuthManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import android.util.Log
+import androidx.fragment.app.FragmentActivity
 
 class AuthViewModel(
     private val supabaseApi: SupabaseApi,
-    private val sessionStorage: SessionStorage
+    private val sessionStorage: SessionStorage,
+    private val biometricAuthManager: BiometricAuthManager
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow<AuthUiState>(AuthUiState.Initial)
@@ -21,13 +24,51 @@ class AuthViewModel(
     private val _isLoggedIn = MutableStateFlow(false)
     val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
     
+    private val _isBiometricAvailable = MutableStateFlow(false)
+    val isBiometricAvailable: StateFlow<Boolean> = _isBiometricAvailable.asStateFlow()
+    
     init {
         checkLoginStatus()
+        checkBiometricAvailability()
     }
     
     private fun checkLoginStatus() {
         viewModelScope.launch {
             _isLoggedIn.value = sessionStorage.isLoggedIn()
+        }
+    }
+    
+    private fun checkBiometricAvailability() {
+        _isBiometricAvailable.value = biometricAuthManager.isBiometricAvailable()
+    }
+    
+    fun loginWithBiometric(activity: FragmentActivity) {
+        viewModelScope.launch {
+            Log.d("AuthViewModel", "Starting biometric authentication")
+            _uiState.value = AuthUiState.Loading
+            
+            try {
+                biometricAuthManager.authenticateWithBiometric(activity)
+                    .onSuccess {
+                        Log.d("AuthViewModel", "Biometric authentication successful")
+                        // Retrieve stored credentials and login
+                        val storedEmail = sessionStorage.getStoredEmail()
+                        val storedPassword = sessionStorage.getStoredPassword()
+                        
+                        if (storedEmail != null && storedPassword != null) {
+                            login(storedEmail, storedPassword)
+                        } else {
+                            _uiState.value = AuthUiState.Error("No stored credentials found. Please login with email and password first.")
+                        }
+                    }
+                    .onFailure { error ->
+                        Log.e("AuthViewModel", "Biometric authentication failed: ${error.message}", error)
+                        _uiState.value = AuthUiState.Error("Biometric authentication failed: ${error.message}")
+                    }
+            } catch (e: Exception) {
+                Log.e("AuthViewModel", "Biometric authentication error: ${e.message}", e)
+                _uiState.value = AuthUiState.Error("Biometric authentication error: ${e.message}")
+            }
         }
     }
     
@@ -43,7 +84,8 @@ class AuthViewModel(
                     authResponse.access_token?.let { sessionStorage.saveAuthToken(it) }
                     authResponse.user?.let { user ->
                         sessionStorage.saveUserId(user.id)
-                        
+                        // Save credentials for biometric login
+                        sessionStorage.saveCredentials(email, password)
                         // Fetch store ID for the user
                         authResponse.access_token?.let { token ->
                             supabaseApi.getStoreByOwnerId(user.id, token)
